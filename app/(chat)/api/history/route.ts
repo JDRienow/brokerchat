@@ -25,10 +25,17 @@ export async function GET(request: NextRequest) {
 
   const chats = await getChatsByUserId({
     id: session.user.id,
-    limit,
+    limit: limit + 1, // Get one extra to check if there are more
     startingAfter,
     endingBefore,
   });
 
-  return Response.json(chats);
+  // Check if there are more items
+  const hasMore = chats.length > limit;
+  const chatData = hasMore ? chats.slice(0, limit) : chats;
+
+  return Response.json({
+    chats: chatData,
+    hasMore,
+  });
 }

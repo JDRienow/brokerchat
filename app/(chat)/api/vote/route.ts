@@ -1,5 +1,4 @@
 import { auth } from '@/app/(auth)/auth';
-import { getChatById, getVotesByChatId, voteMessage } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
 export async function GET(request: Request) {
@@ -19,19 +18,9 @@ export async function GET(request: Request) {
     return new ChatSDKError('unauthorized:vote').toResponse();
   }
 
-  const chat = await getChatById({ id: chatId });
-
-  if (!chat) {
-    return new ChatSDKError('not_found:chat').toResponse();
-  }
-
-  if (chat.userId !== session.user.id) {
-    return new ChatSDKError('forbidden:vote').toResponse();
-  }
-
-  const votes = await getVotesByChatId({ id: chatId });
-
-  return Response.json(votes, { status: 200 });
+  // For MVP: Return empty votes array
+  // TODO: Implement voting system with proper database schema
+  return Response.json([], { status: 200 });
 }
 
 export async function PATCH(request: Request) {
@@ -55,21 +44,11 @@ export async function PATCH(request: Request) {
     return new ChatSDKError('unauthorized:vote').toResponse();
   }
 
-  const chat = await getChatById({ id: chatId });
-
-  if (!chat) {
-    return new ChatSDKError('not_found:vote').toResponse();
-  }
-
-  if (chat.userId !== session.user.id) {
-    return new ChatSDKError('forbidden:vote').toResponse();
-  }
-
-  await voteMessage({
-    chatId,
-    messageId,
-    type: type,
-  });
+  // For MVP: Accept vote but don't store it
+  // TODO: Implement voting system with proper database schema
+  console.log(
+    `Vote ${type} recorded for message ${messageId} in chat ${chatId}`,
+  );
 
   return new Response('Message voted', { status: 200 });
 }

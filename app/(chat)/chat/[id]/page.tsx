@@ -1,74 +1,88 @@
-import { cookies } from 'next/headers';
-import { notFound, redirect } from 'next/navigation';
-
-import { auth } from '@/app/(auth)/auth';
+import { notFound } from 'next/navigation';
+import { fetchDocumentMetadata, fetchChatHistory } from '@/lib/db/queries';
 import { Chat } from '@/components/chat';
-import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
 import { DataStreamHandler } from '@/components/data-stream-handler';
+import { auth } from '@/app/(auth)/auth';
 import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
-import { convertToUIMessages } from '@/lib/utils';
+import type { ChatMessage } from '@/lib/types';
 
-export default async function Page(props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
-  const { id } = params;
-  const chat = await getChatById({ id });
+export default async function Page({
+  params,
+}: { params: Promise<{ id: string }> }) {
+  const { id: documentId } = await params;
 
-  if (!chat) {
+  const session = await auth();
+  if (!session) {
     notFound();
   }
 
-  const session = await auth();
-
-  if (!session) {
-    redirect('/api/auth/guest');
-  }
-
-  if (chat.visibility === 'private') {
-    if (!session.user) {
-      return notFound();
-    }
-
-    if (session.user.id !== chat.userId) {
-      return notFound();
-    }
-  }
-
-  const messagesFromDb = await getMessagesByChatId({
-    id,
-  });
-
-  const uiMessages = convertToUIMessages(messagesFromDb);
-
-  const cookieStore = await cookies();
-  const chatModelFromCookie = cookieStore.get('chat-model');
-
-  if (!chatModelFromCookie) {
+  // Fetch document metadata and chat history from Supabase
+  let document = null;
+  let chatHistory = [];
+  try {
+    document = await fetchDocumentMetadata(documentId);
+    chatHistory = await fetchChatHistory(documentId);
+  } catch {
+    // If document not found, show error
     return (
-      <>
-        <Chat
-          id={chat.id}
-          initialMessages={uiMessages}
-          initialChatModel={DEFAULT_CHAT_MODEL}
-          initialVisibilityType={chat.visibility}
-          isReadonly={session?.user?.id !== chat.userId}
-          session={session}
-          autoResume={true}
-        />
-        <DataStreamHandler />
-      </>
+      <div className="flex flex-col items-center justify-center h-screen">
+        <h1 className="text-2xl font-bold mb-2">Document Not Found</h1>
+        <p className="text-muted-foreground">
+          The document you are looking for does not exist.
+        </p>
+      </div>
     );
+  }
+
+  if (!document) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <h1 className="text-2xl font-bold mb-2">Document Not Found</h1>
+        <p className="text-muted-foreground">
+          The document you are looking for does not exist.
+        </p>
+      </div>
+    );
+  }
+
+  // Transform chat history to UIMessage format
+  const initialMessages: ChatMessage[] = chatHistory.map((msg: any) => ({
+    id: msg.id,
+    role: msg.role,
+    parts: [{ type: 'text', text: msg.content }],
+    metadata: {
+      createdAt: msg.created_at,
+    },
+  }));
+
+  // Add initial system message about the document if no chat history exists
+  if (initialMessages.length === 0) {
+    initialMessages.push({
+      id: 'system-welcome',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'text',
+          text: `Hello! I'm here to help you with questions about "${document.title}". You can ask me anything about this document and I'll provide answers based on its content.`,
+        },
+      ],
+      metadata: {
+        createdAt: new Date().toISOString(),
+      },
+    });
   }
 
   return (
     <>
       <Chat
-        id={chat.id}
-        initialMessages={uiMessages}
-        initialChatModel={chatModelFromCookie.value}
-        initialVisibilityType={chat.visibility}
-        isReadonly={session?.user?.id !== chat.userId}
+        key={documentId}
+        id={documentId}
+        initialMessages={initialMessages}
+        initialChatModel={DEFAULT_CHAT_MODEL}
+        initialVisibilityType="private"
+        isReadonly={false}
         session={session}
-        autoResume={true}
+        autoResume={false}
       />
       <DataStreamHandler />
     </>

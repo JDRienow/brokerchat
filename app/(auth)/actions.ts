@@ -1,14 +1,24 @@
 'use server';
 
 import { z } from 'zod';
+import { hash } from 'bcrypt-ts';
 
-import { createUser, getUser } from '@/lib/db/queries';
+import { createBroker, getBrokerByEmail } from '@/lib/db/queries';
 
 import { signIn } from './auth';
 
 const authFormSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
+});
+
+const brokerRegistrationSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  first_name: z.string().min(1),
+  last_name: z.string().min(1),
+  company_name: z.string().optional(),
+  phone: z.string().optional(),
 });
 
 export interface LoginActionState {
@@ -56,17 +66,34 @@ export const register = async (
   formData: FormData,
 ): Promise<RegisterActionState> => {
   try {
-    const validatedData = authFormSchema.parse({
+    const validatedData = brokerRegistrationSchema.parse({
       email: formData.get('email'),
       password: formData.get('password'),
+      first_name: formData.get('first_name'),
+      last_name: formData.get('last_name'),
+      company_name: formData.get('company_name'),
+      phone: formData.get('phone'),
     });
 
-    const [user] = await getUser(validatedData.email);
+    const existingBroker = await getBrokerByEmail(validatedData.email);
 
-    if (user) {
+    if (existingBroker) {
       return { status: 'user_exists' } as RegisterActionState;
     }
-    await createUser(validatedData.email, validatedData.password);
+
+    // Hash password
+    const hashedPassword = await hash(validatedData.password, 10);
+
+    // Create broker account
+    await createBroker({
+      email: validatedData.email,
+      password_hash: hashedPassword,
+      first_name: validatedData.first_name,
+      last_name: validatedData.last_name,
+      company_name: validatedData.company_name,
+      phone: validatedData.phone,
+    });
+
     await signIn('credentials', {
       email: validatedData.email,
       password: validatedData.password,

@@ -13,8 +13,14 @@ export async function GET(request: Request) {
     secureCookie: !isDevelopmentEnvironment,
   });
 
-  if (token) {
+  // Allow access to register page even if already authenticated
+  if (token && !redirectUrl.includes('/register')) {
     return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  // If trying to access register page, redirect there directly
+  if (redirectUrl.includes('/register')) {
+    return NextResponse.redirect(new URL('/register', request.url));
   }
 
   return signIn('guest', { redirect: true, redirectTo: redirectUrl });

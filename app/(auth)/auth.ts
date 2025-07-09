@@ -1,18 +1,22 @@
 import { compare } from 'bcrypt-ts';
 import NextAuth, { type DefaultSession } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
-import { createGuestUser, getUser } from '@/lib/db/queries';
+import { createGuestUser, getBrokerByEmail } from '@/lib/db/queries';
 import { authConfig } from './auth.config';
 import { DUMMY_PASSWORD } from '@/lib/constants';
 import type { DefaultJWT } from 'next-auth/jwt';
 
-export type UserType = 'guest' | 'regular';
+export type UserType = 'guest' | 'broker';
 
 declare module 'next-auth' {
   interface Session extends DefaultSession {
     user: {
       id: string;
       type: UserType;
+      first_name?: string;
+      last_name?: string;
+      company_name?: string;
+      subscription_tier?: string;
     } & DefaultSession['user'];
   }
 
@@ -20,6 +24,10 @@ declare module 'next-auth' {
     id?: string;
     email?: string | null;
     type: UserType;
+    first_name?: string;
+    last_name?: string;
+    company_name?: string;
+    subscription_tier?: string;
   }
 }
 
@@ -27,6 +35,10 @@ declare module 'next-auth/jwt' {
   interface JWT extends DefaultJWT {
     id: string;
     type: UserType;
+    first_name?: string;
+    last_name?: string;
+    company_name?: string;
+    subscription_tier?: string;
   }
 }
 
@@ -41,25 +53,31 @@ export const {
     Credentials({
       credentials: {},
       async authorize({ email, password }: any) {
-        const users = await getUser(email);
+        const broker = await getBrokerByEmail(email);
 
-        if (users.length === 0) {
+        if (!broker) {
           await compare(password, DUMMY_PASSWORD);
           return null;
         }
 
-        const [user] = users;
-
-        if (!user.password) {
+        if (!broker.password_hash) {
           await compare(password, DUMMY_PASSWORD);
           return null;
         }
 
-        const passwordsMatch = await compare(password, user.password);
+        const passwordsMatch = await compare(password, broker.password_hash);
 
         if (!passwordsMatch) return null;
 
-        return { ...user, type: 'regular' };
+        return {
+          id: broker.id,
+          email: broker.email,
+          first_name: broker.first_name,
+          last_name: broker.last_name,
+          company_name: broker.company_name,
+          subscription_tier: broker.subscription_tier,
+          type: 'broker',
+        };
       },
     }),
     Credentials({
@@ -76,6 +94,10 @@ export const {
       if (user) {
         token.id = user.id as string;
         token.type = user.type;
+        token.first_name = user.first_name;
+        token.last_name = user.last_name;
+        token.company_name = user.company_name;
+        token.subscription_tier = user.subscription_tier;
       }
 
       return token;
@@ -84,6 +106,10 @@ export const {
       if (session.user) {
         session.user.id = token.id;
         session.user.type = token.type;
+        session.user.first_name = token.first_name;
+        session.user.last_name = token.last_name;
+        session.user.company_name = token.company_name;
+        session.user.subscription_tier = token.subscription_tier;
       }
 
       return session;

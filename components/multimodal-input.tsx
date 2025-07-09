@@ -109,6 +109,13 @@ function PureMultimodalInput({
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
 
   const submitForm = useCallback(() => {
+    console.log('submitForm called', {
+      input: input.length,
+      status,
+      uploadQueue: uploadQueue.length,
+      attachments: attachments.length,
+    });
+
     window.history.replaceState({}, '', `/chat/${chatId}`);
 
     sendMessage({
@@ -395,15 +402,24 @@ function PureSendButton({
   input: string;
   uploadQueue: Array<string>;
 }) {
+  const isDisabled = input.length === 0 || uploadQueue.length > 0;
+
+  console.log('SendButton render', {
+    inputLength: input.length,
+    uploadQueueLength: uploadQueue.length,
+    isDisabled,
+  });
+
   return (
     <Button
       data-testid="send-button"
       className="rounded-full p-1.5 h-fit border dark:border-zinc-600"
       onClick={(event) => {
         event.preventDefault();
+        console.log('Send button clicked');
         submitForm();
       }}
-      disabled={input.length === 0 || uploadQueue.length > 0}
+      disabled={isDisabled}
     >
       <ArrowUpIcon size={14} />
     </Button>

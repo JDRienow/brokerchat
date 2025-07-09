@@ -24,6 +24,11 @@ export async function middleware(request: NextRequest) {
   });
 
   if (!token) {
+    // Allow access to register page without authentication
+    if (pathname === '/register') {
+      return NextResponse.next();
+    }
+
     const redirectUrl = encodeURIComponent(request.url);
 
     return NextResponse.redirect(
@@ -33,7 +38,7 @@ export async function middleware(request: NextRequest) {
 
   const isGuest = guestRegex.test(token?.email ?? '');
 
-  if (token && !isGuest && ['/login', '/register'].includes(pathname)) {
+  if (token && !isGuest && pathname === '/login') {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

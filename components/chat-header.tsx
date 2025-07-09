@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useWindowSize } from 'usehooks-ts';
+import { useEffect, useState } from 'react';
 
 import { ModelSelector } from '@/components/model-selector';
 import { SidebarToggle } from '@/components/sidebar-toggle';
@@ -13,6 +14,13 @@ import { memo } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { type VisibilityType, VisibilitySelector } from './visibility-selector';
 import type { Session } from 'next-auth';
+
+interface DocumentMetadata {
+  id: string;
+  title: string;
+  url: string;
+  created_at: string;
+}
 
 function PureChatHeader({
   chatId,
@@ -29,8 +37,29 @@ function PureChatHeader({
 }) {
   const router = useRouter();
   const { open } = useSidebar();
-
   const { width: windowWidth } = useWindowSize();
+
+  const [documentMetadata, setDocumentMetadata] =
+    useState<DocumentMetadata | null>(null);
+
+  // Check if this is a document chat (UUID format)
+  const isDocumentChat =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      chatId,
+    );
+
+  useEffect(() => {
+    if (isDocumentChat) {
+      fetch(`/api/document?id=${chatId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && !data.error) {
+            setDocumentMetadata(data);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [chatId, isDocumentChat]);
 
   return (
     <header className="flex sticky top-0 bg-background py-1.5 items-center px-2 md:px-2 gap-2">
@@ -53,6 +82,23 @@ function PureChatHeader({
           </TooltipTrigger>
           <TooltipContent>New Chat</TooltipContent>
         </Tooltip>
+      )}
+
+      {/* Document Information Display */}
+      {isDocumentChat && documentMetadata && (
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-2 order-1 md:order-1.5">
+          <h2 className="text-sm font-semibold text-foreground truncate max-w-[200px] md:max-w-[300px]">
+            {documentMetadata.title}
+          </h2>
+          <a
+            href={documentMetadata.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:text-blue-800 underline"
+          >
+            View PDF
+          </a>
+        </div>
       )}
 
       {!isReadonly && (

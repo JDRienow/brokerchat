@@ -1,128 +1,215 @@
-import 'server-only';
+import { createClient } from '@supabase/supabase-js';
 
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gt,
-  gte,
-  inArray,
-  lt,
-  type SQL,
-} from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-import {
-  user,
-  chat,
-  type User,
-  document,
-  type Suggestion,
-  suggestion,
-  message,
-  vote,
-  type DBMessage,
-  type Chat,
-  stream,
-} from './schema';
-import type { ArtifactKind } from '@/components/artifact';
-import { generateUUID } from '../utils';
-import { generateHashedPassword } from './utils';
-import type { VisibilityType } from '@/components/visibility-selector';
-import { ChatSDKError } from '../errors';
+console.log('Supabase URL:', supabaseUrl);
+console.log('Supabase Anon Key:', supabaseAnonKey);
 
-// Optionally, if not using email/pass login, you can
-// use the Drizzle adapter for Auth.js / NextAuth
-// https://authjs.dev/reference/adapter/drizzle
+if (!supabaseUrl) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL');
+if (!supabaseAnonKey) throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
-// biome-ignore lint: Forbidden non-null assertion.
-const client = postgres(process.env.POSTGRES_URL!);
-const db = drizzle(client);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export async function getUser(email: string): Promise<Array<User>> {
-  try {
-    return await db.select().from(user).where(eq(user.email, email));
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get user by email',
+// Fetch all chat history for a given document_id
+export async function fetchChatHistory(documentId: string) {
+  const { data, error } = await supabase
+    .from('chat_histories')
+    .select('*')
+    .eq('document_id', documentId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+// Insert a new chat message for a document
+export async function insertChatMessage(
+  documentId: string,
+  role: string,
+  content: string,
+) {
+  const { data, error } = await supabase
+    .from('chat_histories')
+    .insert([
+      {
+        document_id: documentId,
+        role,
+        content,
+      },
+    ])
+    .select();
+  if (error) throw error;
+  return data?.[0];
+}
+
+// Vector similarity search for document chunks using pgvector
+export async function vectorSimilaritySearch(
+  documentId: string,
+  embedding: number[],
+  k = 5,
+) {
+  // First try the RPC function for vector search
+  const { data, error } = await supabase.rpc('match_documents', {
+    query_embedding: embedding,
+    match_count: k,
+    file_id: documentId,
+  });
+
+  console.log('Vector search RPC result:', {
+    documentId,
+    data,
+    error,
+    dataLength: data?.length,
+  });
+
+  if (error) {
+    console.log(
+      'RPC function failed, checking if documents exist with basic query...',
     );
-  }
-}
 
-export async function createUser(email: string, password: string) {
-  const hashedPassword = generateHashedPassword(password);
+    // Fallback: check if any documents exist for this file_id
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('file_id', documentId)
+      .limit(k);
 
-  try {
-    return await db.insert(user).values({ email, password: hashedPassword });
-  } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to create user');
-  }
-}
-
-export async function createGuestUser() {
-  const email = `guest-${Date.now()}`;
-  const password = generateHashedPassword(generateUUID());
-
-  try {
-    return await db.insert(user).values({ email, password }).returning({
-      id: user.id,
-      email: user.email,
+    console.log('Fallback query result:', {
+      documentId,
+      fallbackData,
+      fallbackError,
+      count: fallbackData?.length,
     });
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to create guest user',
-    );
+
+    if (fallbackError) {
+      console.error('Both RPC and fallback failed:', { error, fallbackError });
+      throw fallbackError;
+    }
+
+    return fallbackData || [];
   }
+
+  return data || [];
 }
 
-export async function saveChat({
-  id,
-  userId,
-  title,
+// Fetch document metadata by id
+export async function fetchDocumentMetadata(documentId: string) {
+  const { data, error } = await supabase
+    .from('document_metadata')
+    .select('*')
+    .eq('id', documentId)
+    .maybeSingle();
+  console.log('fetchDocumentMetadata:', { documentId, data, error });
+  if (error) throw error;
+  return data;
+}
+
+// Insert document metadata
+export async function insertDocumentMetadata(title: string, url: string) {
+  const { data, error } = await supabase
+    .from('document_metadata')
+    .insert([{ title, url }])
+    .select();
+  if (error) throw error;
+  return data?.[0];
+}
+
+// Insert document chunk with metadata (for n8n/LangChain compatibility)
+/**
+ * Inserts a document chunk into the documents table, including metadata for LangChain compatibility.
+ * @param fileId - The file/document id (uuid)
+ * @param content - The text chunk
+ * @param embedding - The embedding vector (1536-dim)
+ * @param chunkIndex - The chunk index (integer)
+ * @param metadata - Optional metadata object (will be stored as jsonb)
+ */
+export async function insertDocumentChunk(
+  fileId: string,
+  content: string,
+  embedding: number[],
+  chunkIndex: number,
+  metadata?: any,
+) {
+  const { data, error } = await supabase
+    .from('documents')
+    .insert({
+      file_id: fileId,
+      content,
+      embedding,
+      chunk_index: chunkIndex,
+      metadata: metadata || {
+        file_id: fileId,
+        chunk_index: chunkIndex,
+        source: 'pdf',
+      },
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Minimal auth compatibility exports for MVP (no-op)
+export async function createGuestUser() {
+  // Return a dummy guest user object
+  return [
+    {
+      id: `guest_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      email: null,
+      type: 'guest',
+    },
+  ];
+}
+
+export async function getUser(email: string) {
+  // Return empty array for MVP (no user storage)
+  return [];
+}
+
+// Get message by ID (from chat_histories table)
+export async function getMessageById({ id }: { id: string }) {
+  const { data, error } = await supabase
+    .from('chat_histories')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return [];
+  return [{ ...data, chatId: data.document_id, createdAt: data.created_at }]; // Return as array with compatible format
+}
+
+// Delete messages by document ID after timestamp
+export async function deleteMessagesByChatIdAfterTimestamp({
+  chatId,
+  timestamp,
+}: {
+  chatId: string;
+  timestamp: Date;
+}) {
+  const { error } = await supabase
+    .from('chat_histories')
+    .delete()
+    .eq('document_id', chatId) // Use document_id instead of chat_id
+    .gte('created_at', timestamp.toISOString());
+  if (error) throw error;
+}
+
+// Update chat visibility by ID (not supported in current schema, no-op for compatibility)
+export async function updateChatVisibilityById({
+  chatId,
   visibility,
 }: {
-  id: string;
-  userId: string;
-  title: string;
-  visibility: VisibilityType;
+  chatId: string;
+  visibility: string;
 }) {
-  try {
-    return await db.insert(chat).values({
-      id,
-      createdAt: new Date(),
-      userId,
-      title,
-      visibility,
-    });
-  } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to save chat');
-  }
+  // No-op since document_metadata doesn't have visibility field
+  // Could add this field if needed in the future
+  console.log(
+    `Visibility update requested for ${chatId}: ${visibility} (not implemented)`,
+  );
 }
 
-export async function deleteChatById({ id }: { id: string }) {
-  try {
-    await db.delete(vote).where(eq(vote.chatId, id));
-    await db.delete(message).where(eq(message.chatId, id));
-    await db.delete(stream).where(eq(stream.chatId, id));
-
-    const [chatsDeleted] = await db
-      .delete(chat)
-      .where(eq(chat.id, id))
-      .returning();
-    return chatsDeleted;
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to delete chat by id',
-    );
-  }
-}
-
+// Get documents/chats by user ID with pagination (using document_metadata table)
 export async function getChatsByUserId({
   id,
   limit,
@@ -131,408 +218,378 @@ export async function getChatsByUserId({
 }: {
   id: string;
   limit: number;
-  startingAfter: string | null;
-  endingBefore: string | null;
+  startingAfter?: string | null;
+  endingBefore?: string | null;
 }) {
-  try {
-    const extendedLimit = limit + 1;
+  // Since we don't have user association in document_metadata,
+  // return all documents for now (for MVP)
+  let query = supabase
+    .from('document_metadata')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
 
-    const query = (whereCondition?: SQL<any>) =>
-      db
-        .select()
-        .from(chat)
-        .where(
-          whereCondition
-            ? and(whereCondition, eq(chat.userId, id))
-            : eq(chat.userId, id),
-        )
-        .orderBy(desc(chat.createdAt))
-        .limit(extendedLimit);
+  // Handle pagination
+  if (startingAfter) {
+    const { data: afterDoc, error } = await supabase
+      .from('document_metadata')
+      .select('created_at')
+      .eq('id', startingAfter)
+      .maybeSingle();
 
-    let filteredChats: Array<Chat> = [];
-
-    if (startingAfter) {
-      const [selectedChat] = await db
-        .select()
-        .from(chat)
-        .where(eq(chat.id, startingAfter))
-        .limit(1);
-
-      if (!selectedChat) {
-        throw new ChatSDKError(
-          'not_found:database',
-          `Chat with id ${startingAfter} not found`,
-        );
-      }
-
-      filteredChats = await query(gt(chat.createdAt, selectedChat.createdAt));
-    } else if (endingBefore) {
-      const [selectedChat] = await db
-        .select()
-        .from(chat)
-        .where(eq(chat.id, endingBefore))
-        .limit(1);
-
-      if (!selectedChat) {
-        throw new ChatSDKError(
-          'not_found:database',
-          `Chat with id ${endingBefore} not found`,
-        );
-      }
-
-      filteredChats = await query(lt(chat.createdAt, selectedChat.createdAt));
-    } else {
-      filteredChats = await query();
+    if (!error && afterDoc) {
+      query = query.lt('created_at', afterDoc.created_at);
     }
-
-    const hasMore = filteredChats.length > limit;
-
-    return {
-      chats: hasMore ? filteredChats.slice(0, limit) : filteredChats,
-      hasMore,
-    };
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get chats by user id',
-    );
   }
-}
 
-export async function getChatById({ id }: { id: string }) {
-  try {
-    const [selectedChat] = await db.select().from(chat).where(eq(chat.id, id));
-    return selectedChat;
-  } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to get chat by id');
-  }
-}
+  if (endingBefore) {
+    const { data: beforeDoc, error } = await supabase
+      .from('document_metadata')
+      .select('created_at')
+      .eq('id', endingBefore)
+      .maybeSingle();
 
-export async function saveMessages({
-  messages,
-}: {
-  messages: Array<DBMessage>;
-}) {
-  try {
-    return await db.insert(message).values(messages);
-  } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to save messages');
-  }
-}
-
-export async function getMessagesByChatId({ id }: { id: string }) {
-  try {
-    return await db
-      .select()
-      .from(message)
-      .where(eq(message.chatId, id))
-      .orderBy(asc(message.createdAt));
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get messages by chat id',
-    );
-  }
-}
-
-export async function voteMessage({
-  chatId,
-  messageId,
-  type,
-}: {
-  chatId: string;
-  messageId: string;
-  type: 'up' | 'down';
-}) {
-  try {
-    const [existingVote] = await db
-      .select()
-      .from(vote)
-      .where(and(eq(vote.messageId, messageId)));
-
-    if (existingVote) {
-      return await db
-        .update(vote)
-        .set({ isUpvoted: type === 'up' })
-        .where(and(eq(vote.messageId, messageId), eq(vote.chatId, chatId)));
+    if (!error && beforeDoc) {
+      query = query.gt('created_at', beforeDoc.created_at);
     }
-    return await db.insert(vote).values({
-      chatId,
-      messageId,
-      isUpvoted: type === 'up',
-    });
-  } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to vote message');
   }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  // Transform to match expected Chat format
+  return (data || []).map((doc) => ({
+    id: doc.id,
+    title: doc.title,
+    createdAt: doc.created_at,
+    userId: id, // Fake user association for compatibility
+    visibility: 'private',
+  }));
 }
 
-export async function getVotesByChatId({ id }: { id: string }) {
-  try {
-    return await db.select().from(vote).where(eq(vote.chatId, id));
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get votes by chat id',
-    );
-  }
+// ==================== BROKER FUNCTIONS ====================
+
+// Get broker by email
+export async function getBrokerByEmail(email: string) {
+  const { data, error } = await supabase
+    .from('brokers')
+    .select('*')
+    .eq('email', email)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
-export async function saveDocument({
-  id,
-  title,
-  kind,
-  content,
-  userId,
-}: {
-  id: string;
+// Get broker by ID
+export async function getBrokerById(id: string) {
+  const { data, error } = await supabase
+    .from('brokers')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// Create new broker
+export async function createBroker(brokerData: {
+  email: string;
+  password_hash: string;
+  first_name: string;
+  last_name: string;
+  company_name?: string;
+  phone?: string;
+  subscription_tier?: string;
+}) {
+  const { data, error } = await supabase
+    .from('brokers')
+    .insert([brokerData])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Update broker
+export async function updateBroker(
+  id: string,
+  updates: Partial<{
+    first_name: string;
+    last_name: string;
+    company_name: string;
+    phone: string;
+    subscription_tier: string;
+    subscription_status: string;
+  }>,
+) {
+  const { data, error } = await supabase
+    .from('brokers')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Get broker's documents
+export async function getBrokerDocuments(brokerId: string) {
+  const { data, error } = await supabase
+    .from('document_metadata')
+    .select(`
+      *,
+      documents:documents(count)
+    `)
+    .eq('broker_id', brokerId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+// ==================== PUBLIC LINK FUNCTIONS ====================
+
+// Create public link for document
+export async function createPublicLink(linkData: {
+  document_id: string;
+  broker_id: string;
   title: string;
-  kind: ArtifactKind;
-  content: string;
-  userId: string;
+  description?: string;
+  requires_email?: boolean;
+  custom_branding?: any;
 }) {
-  try {
-    return await db
-      .insert(document)
-      .values({
-        id,
-        title,
-        kind,
-        content,
-        userId,
-        createdAt: new Date(),
-      })
-      .returning();
-  } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to save document');
-  }
+  const public_token = `doc_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+  const { data, error } = await supabase
+    .from('public_links')
+    .insert([{ ...linkData, public_token }])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
-export async function getDocumentsById({ id }: { id: string }) {
-  try {
-    const documents = await db
-      .select()
-      .from(document)
-      .where(eq(document.id, id))
-      .orderBy(asc(document.createdAt));
-
-    return documents;
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get documents by id',
-    );
-  }
+// Get public link by token
+export async function getPublicLinkByToken(token: string) {
+  const { data, error } = await supabase
+    .from('public_links')
+    .select(`
+      *,
+      document_metadata:document_metadata(*),
+      broker:brokers(first_name, last_name, company_name)
+    `)
+    .eq('public_token', token)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
-export async function getDocumentById({ id }: { id: string }) {
-  try {
-    const [selectedDocument] = await db
-      .select()
-      .from(document)
-      .where(eq(document.id, id))
-      .orderBy(desc(document.createdAt));
-
-    return selectedDocument;
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get document by id',
-    );
-  }
+// Get broker's public links
+export async function getBrokerPublicLinks(brokerId: string) {
+  const { data, error } = await supabase
+    .from('public_links')
+    .select(`
+      *,
+      document_metadata:document_metadata(title, created_at),
+      client_sessions:client_sessions(count)
+    `)
+    .eq('broker_id', brokerId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
 }
 
-export async function deleteDocumentsByIdAfterTimestamp({
-  id,
-  timestamp,
-}: {
-  id: string;
-  timestamp: Date;
+// Update public link
+export async function updatePublicLink(
+  id: string,
+  updates: Partial<{
+    title: string;
+    description: string;
+    is_active: boolean;
+    requires_email: boolean;
+    custom_branding: any;
+  }>,
+) {
+  const { data, error } = await supabase
+    .from('public_links')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Delete public link
+export async function deletePublicLink(id: string) {
+  const { error } = await supabase.from('public_links').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ==================== CLIENT SESSION FUNCTIONS ====================
+
+// Create client session
+export async function createClientSession(sessionData: {
+  public_link_id: string;
+  client_email: string;
+  client_name?: string;
+  client_phone?: string;
 }) {
-  try {
-    await db
-      .delete(suggestion)
-      .where(
-        and(
-          eq(suggestion.documentId, id),
-          gt(suggestion.documentCreatedAt, timestamp),
-        ),
-      );
+  const session_token = `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    return await db
-      .delete(document)
-      .where(and(eq(document.id, id), gt(document.createdAt, timestamp)))
-      .returning();
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to delete documents by id after timestamp',
-    );
-  }
+  const { data, error } = await supabase
+    .from('client_sessions')
+    .insert([{ ...sessionData, session_token }])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
-export async function saveSuggestions({
-  suggestions,
-}: {
-  suggestions: Array<Suggestion>;
-}) {
-  try {
-    return await db.insert(suggestion).values(suggestions);
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to save suggestions',
-    );
-  }
-}
-
-export async function getSuggestionsByDocumentId({
-  documentId,
-}: {
-  documentId: string;
-}) {
-  try {
-    return await db
-      .select()
-      .from(suggestion)
-      .where(and(eq(suggestion.documentId, documentId)));
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get suggestions by document id',
-    );
-  }
-}
-
-export async function getMessageById({ id }: { id: string }) {
-  try {
-    return await db.select().from(message).where(eq(message.id, id));
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get message by id',
-    );
-  }
-}
-
-export async function deleteMessagesByChatIdAfterTimestamp({
-  chatId,
-  timestamp,
-}: {
-  chatId: string;
-  timestamp: Date;
-}) {
-  try {
-    const messagesToDelete = await db
-      .select({ id: message.id })
-      .from(message)
-      .where(
-        and(eq(message.chatId, chatId), gte(message.createdAt, timestamp)),
-      );
-
-    const messageIds = messagesToDelete.map((message) => message.id);
-
-    if (messageIds.length > 0) {
-      await db
-        .delete(vote)
-        .where(
-          and(eq(vote.chatId, chatId), inArray(vote.messageId, messageIds)),
-        );
-
-      return await db
-        .delete(message)
-        .where(
-          and(eq(message.chatId, chatId), inArray(message.id, messageIds)),
-        );
-    }
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to delete messages by chat id after timestamp',
-    );
-  }
-}
-
-export async function updateChatVisiblityById({
-  chatId,
-  visibility,
-}: {
-  chatId: string;
-  visibility: 'private' | 'public';
-}) {
-  try {
-    return await db.update(chat).set({ visibility }).where(eq(chat.id, chatId));
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to update chat visibility by id',
-    );
-  }
-}
-
-export async function getMessageCountByUserId({
-  id,
-  differenceInHours,
-}: { id: string; differenceInHours: number }) {
-  try {
-    const twentyFourHoursAgo = new Date(
-      Date.now() - differenceInHours * 60 * 60 * 1000,
-    );
-
-    const [stats] = await db
-      .select({ count: count(message.id) })
-      .from(message)
-      .innerJoin(chat, eq(message.chatId, chat.id))
-      .where(
-        and(
-          eq(chat.userId, id),
-          gte(message.createdAt, twentyFourHoursAgo),
-          eq(message.role, 'user'),
-        ),
+// Get client session by token
+export async function getClientSessionByToken(token: string) {
+  const { data, error } = await supabase
+    .from('client_sessions')
+    .select(`
+      *,
+      public_link:public_links(
+        *,
+        document_metadata:document_metadata(*),
+        broker:brokers(first_name, last_name, company_name)
       )
-      .execute();
-
-    return stats?.count ?? 0;
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get message count by user id',
-    );
-  }
+    `)
+    .eq('session_token', token)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
-export async function createStreamId({
-  streamId,
-  chatId,
-}: {
-  streamId: string;
-  chatId: string;
+// Update client session activity
+export async function updateClientSessionActivity(
+  sessionId: string,
+  messageCount?: number,
+) {
+  const updates = { last_activity: new Date().toISOString() } as any;
+  if (messageCount !== undefined) {
+    updates.total_messages = messageCount;
+  }
+
+  const { data, error } = await supabase
+    .from('client_sessions')
+    .update(updates)
+    .eq('id', sessionId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Get public link's client sessions
+export async function getPublicLinkClientSessions(publicLinkId: string) {
+  const { data, error } = await supabase
+    .from('client_sessions')
+    .select('*')
+    .eq('public_link_id', publicLinkId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+// ==================== ANALYTICS FUNCTIONS ====================
+
+// Track analytics event
+export async function trackAnalyticsEvent(eventData: {
+  broker_id: string;
+  public_link_id?: string;
+  client_session_id?: string;
+  event_type:
+    | 'link_view'
+    | 'email_capture'
+    | 'chat_message'
+    | 'document_download';
+  event_data?: any;
 }) {
-  try {
-    await db
-      .insert(stream)
-      .values({ id: streamId, chatId, createdAt: new Date() });
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to create stream id',
-    );
-  }
+  const { data, error } = await supabase
+    .from('analytics')
+    .insert([eventData])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
-export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
-  try {
-    const streamIds = await db
-      .select({ id: stream.id })
-      .from(stream)
-      .where(eq(stream.chatId, chatId))
-      .orderBy(asc(stream.createdAt))
-      .execute();
+// Get broker analytics
+export async function getBrokerAnalytics(brokerId: string, days: number = 30) {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
 
-    return streamIds.map(({ id }) => id);
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get stream ids by chat id',
-    );
+  const { data, error } = await supabase
+    .from('analytics')
+    .select('*')
+    .eq('broker_id', brokerId)
+    .gte('created_at', startDate.toISOString())
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+// Get public link analytics
+export async function getPublicLinkAnalytics(
+  publicLinkId: string,
+  days: number = 30,
+) {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+
+  const { data, error } = await supabase
+    .from('analytics')
+    .select('*')
+    .eq('public_link_id', publicLinkId)
+    .gte('created_at', startDate.toISOString())
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+// ==================== ENHANCED DOCUMENT FUNCTIONS ====================
+
+// Insert document metadata with broker association
+export async function insertDocumentMetadataWithBroker(
+  title: string,
+  url: string,
+  brokerId: string,
+) {
+  const { data, error } = await supabase
+    .from('document_metadata')
+    .insert([{ title, url, broker_id: brokerId }])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Insert chat message with client session
+export async function insertChatMessageWithSession(
+  documentId: string,
+  role: string,
+  content: string,
+  clientSessionId?: string,
+) {
+  const insertData = {
+    document_id: documentId,
+    role,
+    content,
+  } as any;
+
+  if (clientSessionId) {
+    insertData.client_session_id = clientSessionId;
   }
+
+  const { data, error } = await supabase
+    .from('chat_histories')
+    .insert([insertData])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }

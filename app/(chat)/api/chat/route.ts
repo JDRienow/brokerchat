@@ -1,254 +1,232 @@
+import { auth } from '@/app/(auth)/auth';
 import {
-  convertToModelMessages,
-  createUIMessageStream,
-  JsonToSseTransformStream,
-  smoothStream,
-  stepCountIs,
-  streamText,
-} from 'ai';
-import { auth, type UserType } from '@/app/(auth)/auth';
-import { type RequestHints, systemPrompt } from '@/lib/ai/prompts';
-import {
-  createStreamId,
-  deleteChatById,
-  getChatById,
-  getMessageCountByUserId,
-  getMessagesByChatId,
-  saveChat,
-  saveMessages,
+  fetchDocumentMetadata,
+  vectorSimilaritySearch,
+  insertChatMessage,
 } from '@/lib/db/queries';
-import { convertToUIMessages, generateUUID } from '@/lib/utils';
-import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
-import { isProductionEnvironment } from '@/lib/constants';
-import { myProvider } from '@/lib/ai/providers';
-import { entitlementsByUserType } from '@/lib/ai/entitlements';
-import { postRequestBodySchema, type PostRequestBody } from './schema';
-import { geolocation } from '@vercel/functions';
-import {
-  createResumableStreamContext,
-  type ResumableStreamContext,
-} from 'resumable-stream';
-import { after } from 'next/server';
-import { ChatSDKError } from '@/lib/errors';
-import type { ChatMessage } from '@/lib/types';
-import type { ChatModel } from '@/lib/ai/models';
-import type { VisibilityType } from '@/components/visibility-selector';
+import type { NextRequest } from 'next/server';
 
-export const maxDuration = 60;
+const OPENAI_EMBEDDING_MODEL =
+  process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 
-let globalStreamContext: ResumableStreamContext | null = null;
-
-export function getStreamContext() {
-  if (!globalStreamContext) {
-    try {
-      globalStreamContext = createResumableStreamContext({
-        waitUntil: after,
-      });
-    } catch (error: any) {
-      if (error.message.includes('REDIS_URL')) {
-        console.log(
-          ' > Resumable streams are disabled due to missing REDIS_URL',
-        );
-      } else {
-        console.error(error);
-      }
-    }
-  }
-
-  return globalStreamContext;
-}
-
-export async function POST(request: Request) {
-  let requestBody: PostRequestBody;
-
-  try {
-    const json = await request.json();
-    requestBody = postRequestBodySchema.parse(json);
-  } catch (_) {
-    return new ChatSDKError('bad_request:api').toResponse();
+export async function POST(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return new Response('Unauthorized', { status: 401 });
   }
 
   try {
-    const {
-      id,
-      message,
-      selectedChatModel,
-      selectedVisibilityType,
-    }: {
-      id: string;
-      message: ChatMessage;
-      selectedChatModel: ChatModel['id'];
-      selectedVisibilityType: VisibilityType;
-    } = requestBody;
+    const { id: chatId, message, selectedChatModel } = await request.json();
 
-    const session = await auth();
-
-    if (!session?.user) {
-      return new ChatSDKError('unauthorized:chat').toResponse();
+    if (!message?.parts?.length) {
+      return new Response('Invalid message format', { status: 400 });
     }
 
-    const userType: UserType = session.user.type;
-
-    const messageCount = await getMessageCountByUserId({
-      id: session.user.id,
-      differenceInHours: 24,
-    });
-
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
-      return new ChatSDKError('rate_limit:chat').toResponse();
+    const userMessage = message.parts.find(
+      (part: any) => part.type === 'text',
+    )?.text;
+    if (!userMessage) {
+      return new Response('No text content found', { status: 400 });
     }
 
-    const chat = await getChatById({ id });
+    // Check if this is a document-specific chat (UUID format)
+    const isDocumentChat =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        chatId,
+      );
 
-    if (!chat) {
-      const title = await generateTitleFromUserMessage({
-        message,
-      });
+    let systemMessage = 'You are a helpful AI assistant.';
+    let context = '';
 
-      await saveChat({
-        id,
-        userId: session.user.id,
-        title,
-        visibility: selectedVisibilityType,
-      });
-    } else {
-      if (chat.userId !== session.user.id) {
-        return new ChatSDKError('forbidden:chat').toResponse();
-      }
-    }
+    if (isDocumentChat) {
+      try {
+        // Fetch document metadata
+        const document = await fetchDocumentMetadata(chatId);
+        if (!document) {
+          return new Response('Document not found', { status: 404 });
+        }
 
-    const messagesFromDb = await getMessagesByChatId({ id });
-    const uiMessages = [...convertToUIMessages(messagesFromDb), message];
-
-    const { longitude, latitude, city, country } = geolocation(request);
-
-    const requestHints: RequestHints = {
-      longitude,
-      latitude,
-      city,
-      country,
-    };
-
-    await saveMessages({
-      messages: [
-        {
-          chatId: id,
-          id: message.id,
-          role: 'user',
-          parts: message.parts,
-          attachments: [],
-          createdAt: new Date(),
-        },
-      ],
-    });
-
-    const streamId = generateUUID();
-    await createStreamId({ streamId, chatId: id });
-
-    console.log(JSON.stringify(uiMessages, null, 2));
-
-    const stream = createUIMessageStream({
-      execute: ({ writer: dataStream }) => {
-        const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, requestHints }),
-          messages: convertToModelMessages(uiMessages),
-          stopWhen: stepCountIs(5),
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : [
-                  'getWeather',
-                  'createDocument',
-                  'updateDocument',
-                  'requestSuggestions',
-                ],
-          experimental_transform: smoothStream({ chunking: 'word' }),
-          tools: {
-            getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({
-              session,
-              dataStream,
+        // Get embedding for the user's message using OpenAI
+        const embeddingRes = await fetch(
+          'https://api.openai.com/v1/embeddings',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: OPENAI_EMBEDDING_MODEL,
+              input: userMessage,
             }),
           },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: 'stream-text',
-          },
-        });
-
-        result.consumeStream();
-
-        dataStream.merge(
-          result.toUIMessageStream({
-            sendReasoning: true,
-          }),
         );
+
+        if (embeddingRes.ok) {
+          const embeddingJson = await embeddingRes.json();
+          const embedding = embeddingJson.data[0].embedding;
+
+          // Vector similarity search for relevant chunks
+          const chunks = await vectorSimilaritySearch(chatId, embedding, 5);
+          context = chunks.map((c: any) => c.content).join('\n---\n');
+
+          console.log(
+            `Found ${chunks.length} relevant chunks for query:`,
+            userMessage,
+          );
+
+          // If no chunks found, provide basic document info as context
+          if (chunks.length === 0) {
+            context = `Document Information:
+- Title: ${document.title}
+- Document ID: ${document.id}
+- Created: ${document.created_at}
+- URL: ${document.url}
+
+Note: The document content chunks are not yet processed in the database. I can only provide basic metadata about this document.`;
+            console.log('No chunks found, using document metadata as context');
+          }
+        }
+
+        systemMessage = `You are a helpful assistant for the document "${document.title}". Use the provided context to answer questions accurately. If the information isn't in the context, say so.\n\nContext:\n${context}`;
+      } catch (error) {
+        console.error('Document processing error:', error);
+        // Continue with general chat if document processing fails
+      }
+    }
+
+    // Use OpenAI API directly with streaming
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       },
-      generateId: generateUUID,
-      onFinish: async ({ messages }) => {
-        await saveMessages({
-          messages: messages.map((message) => ({
-            id: message.id,
-            role: message.role,
-            parts: message.parts,
-            createdAt: new Date(),
-            attachments: [],
-            chatId: id,
-          })),
-        });
-      },
-      onError: (error) => {
-        console.log(error);
-        return 'Oops, an error occurred!';
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: systemMessage,
+          },
+          {
+            role: 'user',
+            content: userMessage,
+          },
+        ],
+        temperature: 0.7,
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI API error:', errorText);
+      return new Response('OpenAI API error', { status: 500 });
+    }
+
+    // Create a readable stream to handle OpenAI's streaming response
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+        let fullResponse = '';
+        const messageId = `msg_${Date.now()}`;
+
+        if (!reader) {
+          controller.close();
+          return;
+        }
+
+        try {
+          // Send start events
+          controller.enqueue(encoder.encode('data: {"type":"start-step"}\n\n'));
+          controller.enqueue(
+            encoder.encode(
+              `data: {"type":"text-start","id":"${messageId}"}\n\n`,
+            ),
+          );
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') {
+                  // Send end events
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: {"type":"text-end","id":"${messageId}"}\n\n`,
+                    ),
+                  );
+                  controller.enqueue(
+                    encoder.encode('data: {"type":"finish-step"}\n\n'),
+                  );
+                  controller.enqueue(
+                    encoder.encode('data: {"type":"finish"}\n\n'),
+                  );
+                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+
+                  // Save chat history when streaming is complete
+                  if (isDocumentChat && fullResponse) {
+                    try {
+                      await insertChatMessage(chatId, 'user', userMessage);
+                      await insertChatMessage(
+                        chatId,
+                        'assistant',
+                        fullResponse,
+                      );
+                    } catch (error) {
+                      console.error('Failed to save chat history:', error);
+                    }
+                  }
+                  controller.close();
+                  return;
+                }
+
+                try {
+                  const json = JSON.parse(data);
+                  const content = json.choices?.[0]?.delta?.content;
+                  if (content) {
+                    fullResponse += content;
+                    // Send text delta in AI SDK format
+                    const deltaData = JSON.stringify({
+                      type: 'text-delta',
+                      id: messageId,
+                      delta: content,
+                    });
+                    controller.enqueue(
+                      encoder.encode(`data: ${deltaData}\n\n`),
+                    );
+                  }
+                } catch (e) {
+                  // Skip invalid JSON
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Stream error:', error);
+          controller.error(error);
+        }
       },
     });
 
-    const streamContext = getStreamContext();
-
-    if (streamContext) {
-      return new Response(
-        await streamContext.resumableStream(streamId, () =>
-          stream.pipeThrough(new JsonToSseTransformStream()),
-        ),
-      );
-    } else {
-      return new Response(stream);
-    }
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    });
   } catch (error) {
-    if (error instanceof ChatSDKError) {
-      return error.toResponse();
-    }
+    console.error('Chat API error:', error);
+    return new Response('Internal server error', { status: 500 });
   }
-}
-
-export async function DELETE(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get('id');
-
-  if (!id) {
-    return new ChatSDKError('bad_request:api').toResponse();
-  }
-
-  const session = await auth();
-
-  if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
-  }
-
-  const chat = await getChatById({ id });
-
-  if (chat.userId !== session.user.id) {
-    return new ChatSDKError('forbidden:chat').toResponse();
-  }
-
-  const deletedChat = await deleteChatById({ id });
-
-  return Response.json(deletedChat, { status: 200 });
 }

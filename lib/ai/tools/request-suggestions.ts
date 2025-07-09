@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import type { Session } from 'next-auth';
 import { streamObject, tool, type UIMessageStreamWriter } from 'ai';
-import { getDocumentById, saveSuggestions } from '@/lib/db/queries';
-import type { Suggestion } from '@/lib/db/schema';
-import { generateUUID } from '@/lib/utils';
-import { myProvider } from '../providers';
+// import { getDocumentById, saveSuggestions } from '@/lib/db/queries'; // Temporarily disabled
+// import type { Suggestion } from '@/lib/db/schema'; // Temporarily disabled
+// import { generateUUID } from '@/lib/utils'; // Temporarily disabled
+// import { myProvider } from '../providers'; // Temporarily disabled
 import type { ChatMessage } from '@/lib/types';
 
 interface RequestSuggestionsProps {
@@ -24,6 +24,15 @@ export const requestSuggestions = ({
         .describe('The ID of the document to request edits'),
     }),
     execute: async ({ documentId }) => {
+      // Temporarily disabled to prevent xAI API errors
+      // TODO: Implement with OpenAI direct API calls
+      return {
+        id: documentId,
+        message:
+          'Document suggestions are temporarily disabled while switching to OpenAI.',
+      };
+
+      /* Original implementation - temporarily commented out
       const document = await getDocumentById({ id: documentId });
 
       if (!document || !document.content) {
@@ -88,5 +97,6 @@ export const requestSuggestions = ({
         kind: document.kind,
         message: 'Suggestions have been added to the document',
       };
+      */
     },
   });
