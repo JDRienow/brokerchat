@@ -35,11 +35,8 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    const redirectUrl = encodeURIComponent(request.url);
-
-    return NextResponse.redirect(
-      new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, request.url),
-    );
+    // Redirect unauthenticated users directly to login page
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   const isGuest = guestRegex.test(token?.email ?? '');
