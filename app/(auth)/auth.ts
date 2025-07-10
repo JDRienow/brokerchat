@@ -1,12 +1,12 @@
 import { compare } from 'bcrypt-ts';
 import NextAuth, { type DefaultSession } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
-import { createGuestUser, getBrokerByEmail } from '@/lib/db/queries';
+import { getBrokerByEmail } from '@/lib/db/queries';
 import { authConfig } from './auth.config';
 import { DUMMY_PASSWORD } from '@/lib/constants';
 import type { DefaultJWT } from 'next-auth/jwt';
 
-export type UserType = 'guest' | 'broker';
+export type UserType = 'broker';
 
 declare module 'next-auth' {
   interface Session extends DefaultSession {
@@ -78,14 +78,6 @@ export const {
           subscription_tier: broker.subscription_tier,
           type: 'broker',
         };
-      },
-    }),
-    Credentials({
-      id: 'guest',
-      credentials: {},
-      async authorize() {
-        const [guestUser] = await createGuestUser();
-        return { ...guestUser, type: 'guest' };
       },
     }),
   ],

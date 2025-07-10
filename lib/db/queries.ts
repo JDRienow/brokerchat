@@ -127,17 +127,7 @@ export async function insertDocumentChunk(
   return data;
 }
 
-// Minimal auth compatibility exports for MVP (no-op)
-export async function createGuestUser() {
-  // Return a dummy guest user object
-  return [
-    {
-      id: `guest_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      email: null,
-      type: 'guest',
-    },
-  ];
-}
+// Broker app doesn't use guest users - removed createGuestUser function
 
 export async function getUser(email: string) {
   // Return empty array for MVP (no user storage)
