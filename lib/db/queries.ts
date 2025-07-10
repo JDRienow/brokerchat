@@ -727,15 +727,11 @@ export async function trackAnalyticsEvent(eventData: {
     | 'document_delete'
     | 'public_link_create'
     | 'public_link_delete'
-    | 'public_link_toggle'
-    | 'dashboard_view'
     | 'profile_update'
     | 'password_reset_request'
     | 'password_reset_complete'
     | 'document_chat_start'
     | 'document_download_attempt'
-    | 'email_analytics_view'
-    | 'analytics_view'
     | 'error_occurred';
   event_data?: any;
 }) {
@@ -767,15 +763,11 @@ export async function trackAnalyticsEventSafely(eventData: {
     | 'document_delete'
     | 'public_link_create'
     | 'public_link_delete'
-    | 'public_link_toggle'
-    | 'dashboard_view'
     | 'profile_update'
     | 'password_reset_request'
     | 'password_reset_complete'
     | 'document_chat_start'
     | 'document_download_attempt'
-    | 'email_analytics_view'
-    | 'analytics_view'
     | 'error_occurred';
   event_data?: any;
 }) {
@@ -790,19 +782,13 @@ export async function trackAnalyticsEventSafely(eventData: {
 // Track user action analytics
 export async function trackUserAction(
   brokerId: string,
-  action:
-    | 'login'
-    | 'logout'
-    | 'registration'
-    | 'dashboard_view'
-    | 'profile_update',
+  action: 'login' | 'logout' | 'registration' | 'profile_update',
   metadata?: any,
 ) {
   const eventTypeMap = {
     login: 'user_login',
     logout: 'user_logout',
     registration: 'user_registration',
-    dashboard_view: 'dashboard_view',
     profile_update: 'profile_update',
   } as const;
 
@@ -838,13 +824,12 @@ export async function trackDocumentAction(
 export async function trackPublicLinkAction(
   brokerId: string,
   publicLinkId: string,
-  action: 'create' | 'delete' | 'toggle',
+  action: 'create' | 'delete',
   metadata?: any,
 ) {
   const eventTypeMap = {
     create: 'public_link_create',
     delete: 'public_link_delete',
-    toggle: 'public_link_toggle',
   } as const;
 
   return trackAnalyticsEventSafely({
@@ -873,21 +858,19 @@ export async function trackPasswordResetAction(
   });
 }
 
-// Track analytics view actions
+// Track analytics view actions (using user_login as allowed event type)
 export async function trackAnalyticsView(
   brokerId: string,
   viewType: 'analytics' | 'email_analytics',
   metadata?: any,
 ) {
-  const eventTypeMap = {
-    analytics: 'analytics_view',
-    email_analytics: 'email_analytics_view',
-  } as const;
-
   return trackAnalyticsEventSafely({
     broker_id: brokerId,
-    event_type: eventTypeMap[viewType],
-    event_data: metadata,
+    event_type: 'user_login', // Use allowed event type
+    event_data: {
+      action: `${viewType}_view`,
+      ...metadata,
+    },
   });
 }
 

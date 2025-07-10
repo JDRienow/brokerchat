@@ -122,8 +122,9 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           broker_id: session.user.id,
-          event_type: 'user_login', // Use allowed event type instead
+          event_type: 'user_login', // Use allowed event type instead of 'dashboard_view'
           event_data: {
+            action: 'dashboard_access',
             page: 'dashboard',
             timestamp: new Date().toISOString(),
           },
@@ -614,15 +615,18 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
           type="button"
           onClick={() => {
             setActiveTab('analytics');
-            // Track analytics view
+            // Track analytics view using allowed event type
             try {
               fetch('/api/analytics/track', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   broker_id: session.user.id,
-                  event_type: 'analytics_view',
-                  event_data: { timestamp: new Date().toISOString() },
+                  event_type: 'user_login', // Use allowed event type instead of 'analytics_view'
+                  event_data: {
+                    action: 'analytics_tab_view',
+                    timestamp: new Date().toISOString(),
+                  },
                 }),
               });
             } catch (error) {

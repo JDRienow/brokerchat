@@ -14,7 +14,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/toast';
 import { UserIcon, CrossIcon } from '@/components/icons';
-import { guestRegex } from '@/lib/constants';
 
 interface ProfilePopoverProps {
   user: User | null | undefined;
@@ -26,15 +25,12 @@ export function ProfilePopover({
   variant = 'default',
 }: ProfilePopoverProps) {
   const router = useRouter();
-  const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
 
   // Return null if no user provided (e.g., on public pages)
   if (!user) {
     return null;
   }
-
-  const isGuest = guestRegex.test(session?.user?.email ?? '');
 
   const handleEditProfile = () => {
     setIsOpen(false);
@@ -54,19 +50,6 @@ export function ProfilePopover({
       });
     }
   };
-
-  if (isGuest) {
-    return (
-      <Button
-        variant="ghost"
-        onClick={() => router.push('/login')}
-        className="h-8 w-8 rounded-full p-0"
-      >
-        <UserIcon />
-        <span className="sr-only">Login</span>
-      </Button>
-    );
-  }
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
