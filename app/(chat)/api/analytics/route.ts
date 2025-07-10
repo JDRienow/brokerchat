@@ -36,13 +36,13 @@ export async function GET(request: NextRequest) {
 
       // Calculate totals from analytics
       const totalViews = analytics.filter(
-        (event) => event.event_type === 'link_view',
+        (event: any) => event.event_type === 'link_view',
       ).length;
       const totalEmailCaptures = analytics.filter(
-        (event) => event.event_type === 'email_capture',
+        (event: any) => event.event_type === 'email_capture',
       ).length;
       const totalMessages = analytics.filter(
-        (event) => event.event_type === 'chat_message',
+        (event: any) => event.event_type === 'chat_message',
       ).length;
 
       summary = {
@@ -51,10 +51,6 @@ export async function GET(request: NextRequest) {
         totalViews,
         totalEmailCaptures,
         totalMessages,
-        conversionRate:
-          totalViews > 0
-            ? ((totalEmailCaptures / totalViews) * 100).toFixed(2)
-            : 0,
       };
     } else if (publicLinkId) {
       // Get public link analytics
@@ -63,13 +59,13 @@ export async function GET(request: NextRequest) {
 
       // Calculate totals
       const totalViews = analytics.filter(
-        (event) => event.event_type === 'link_view',
+        (event: any) => event.event_type === 'link_view',
       ).length;
       const totalEmailCaptures = analytics.filter(
-        (event) => event.event_type === 'email_capture',
+        (event: any) => event.event_type === 'email_capture',
       ).length;
       const totalMessages = analytics.filter(
-        (event) => event.event_type === 'chat_message',
+        (event: any) => event.event_type === 'chat_message',
       ).length;
 
       summary = {
@@ -77,10 +73,6 @@ export async function GET(request: NextRequest) {
         totalViews,
         totalEmailCaptures,
         totalMessages,
-        conversionRate:
-          totalViews > 0
-            ? ((totalEmailCaptures / totalViews) * 100).toFixed(2)
-            : 0,
         clientSessions: clientSessions.slice(0, 10), // Return first 10 sessions
       };
     }

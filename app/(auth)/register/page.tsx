@@ -41,7 +41,11 @@ export default function Page() {
 
       setIsSuccessful(true);
       updateSession();
-      router.refresh();
+
+      // Redirect to dashboard after successful registration
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 1000); // Small delay to show the success message
     }
   }, [state]);
 

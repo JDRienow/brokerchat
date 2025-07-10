@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       documents: documents.map((doc) => ({
         id: doc.id,
         title: doc.title,
-        url: doc.url,
+        url: doc.url || '#',
         created_at: doc.created_at,
         chunk_count: doc.chunk_count || 0,
       })),

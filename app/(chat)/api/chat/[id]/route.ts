@@ -15,9 +15,10 @@ if (!OPENAI_API_KEY) throw new Error('Missing OPENAI_API_KEY');
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const documentId = params.id;
+  const resolvedParams = await params;
+  const documentId = resolvedParams.id;
   let question: string;
 
   try {

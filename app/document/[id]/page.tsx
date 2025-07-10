@@ -3,7 +3,11 @@ import { fetchDocumentMetadata, fetchChatHistory } from '@/lib/db/queries';
 import { Chat } from '@/components/chat';
 import { DataStreamHandler } from '@/components/data-stream-handler';
 import { auth } from '@/app/(auth)/auth';
-import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
+import { DataStreamProvider } from '@/components/data-stream-provider';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { ErrorBoundary } from '@/components/error-boundary';
+import Script from 'next/script';
+
 import type { ChatMessage } from '@/lib/types';
 
 export default async function Page({
@@ -72,19 +76,39 @@ export default async function Page({
     });
   }
 
+  // Document chats get a completely standalone layout without any sidebar
   return (
     <>
-      <Chat
-        key={documentId}
-        id={documentId}
-        initialMessages={initialMessages}
-        initialChatModel={DEFAULT_CHAT_MODEL}
-        initialVisibilityType="private"
-        isReadonly={false}
-        session={session}
-        autoResume={false}
+      <Script
+        src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"
+        strategy="beforeInteractive"
       />
-      <DataStreamHandler />
+      <DataStreamProvider>
+        <SidebarProvider defaultOpen={false}>
+          <main className="flex justify-center w-full h-dvh bg-background">
+            <div className="flex flex-col h-dvh bg-background w-full max-w-4xl">
+              <ErrorBoundary>
+                <Chat
+                  key={documentId}
+                  id={documentId}
+                  initialMessages={initialMessages}
+                  initialVisibilityType="private"
+                  isReadonly={false}
+                  session={session}
+                  autoResume={false}
+                  documentMetadata={{
+                    id: document.id,
+                    title: document.title,
+                    url: document.url,
+                    created_at: document.created_at,
+                  }}
+                />
+                <DataStreamHandler />
+              </ErrorBoundary>
+            </div>
+          </main>
+        </SidebarProvider>
+      </DataStreamProvider>
     </>
   );
 }

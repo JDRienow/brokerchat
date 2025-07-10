@@ -2,7 +2,7 @@ import { auth } from '@/app/(auth)/auth';
 import {
   fetchDocumentMetadata,
   insertDocumentChunk,
-  insertDocumentMetadata,
+  insertDocumentMetadataWithBroker,
 } from '@/lib/db/queries';
 import type { NextRequest } from 'next/server';
 
@@ -111,11 +111,15 @@ export async function POST(request: NextRequest) {
       // Insert document metadata and get the generated ID
       console.log('Inserting document metadata...');
       try {
-        const metadata = await insertDocumentMetadata(title, file.name);
+        const metadata = await insertDocumentMetadataWithBroker(
+          title,
+          file.name,
+          session.user.id,
+        );
         console.log('Metadata result:', metadata);
 
         if (!metadata || !metadata.id) {
-          throw new Error('insertDocumentMetadata returned no data');
+          throw new Error('insertDocumentMetadataWithBroker returned no data');
         }
 
         documentId = metadata.id;

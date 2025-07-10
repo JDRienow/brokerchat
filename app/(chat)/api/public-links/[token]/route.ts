@@ -4,15 +4,16 @@ import {
   getPublicLinkByToken,
   createClientSession,
   trackAnalyticsEvent,
+  getClientSessionChatHistory,
 } from '@/lib/db/queries';
 
 // GET: Get public link by token
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } },
+  { params }: { params: Promise<{ token: string }> },
 ) {
   try {
-    const { token } = params;
+    const { token } = await params;
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email');
     const name = searchParams.get('name');
@@ -23,14 +24,33 @@ export async function GET(
     }
 
     // Get the public link
-    const publicLink = await getPublicLinkByToken(token);
+    const publicLinkRaw = await getPublicLinkByToken(token);
 
-    if (!publicLink) {
+    if (!publicLinkRaw) {
       return NextResponse.json(
         { error: 'Public link not found or inactive' },
         { status: 404 },
       );
     }
+
+    // Transform data to match public page expectations
+    const publicLink = {
+      id: publicLinkRaw.id,
+      title: publicLinkRaw.title,
+      description: publicLinkRaw.description,
+      document_id: publicLinkRaw.document_id,
+      broker_id: publicLinkRaw.broker_id,
+      document_title:
+        publicLinkRaw.document_metadata?.title || 'Unknown Document',
+      document_url: publicLinkRaw.document_metadata?.url || '#',
+      document_created_at:
+        publicLinkRaw.document_metadata?.created_at || new Date().toISOString(),
+      broker_name:
+        `${publicLinkRaw.broker?.first_name || ''} ${publicLinkRaw.broker?.last_name || ''}`.trim(),
+      broker_company: publicLinkRaw.broker?.company_name || '',
+      requires_email: publicLinkRaw.requires_email,
+      custom_branding: publicLinkRaw.custom_branding,
+    };
 
     // Track analytics event
     await trackAnalyticsEvent({
@@ -49,18 +69,28 @@ export async function GET(
           client_phone: phone || undefined,
         });
 
-        // Track email capture
-        await trackAnalyticsEvent({
-          broker_id: publicLink.broker_id,
-          public_link_id: publicLink.id,
-          client_session_id: clientSession.id,
-          event_type: 'email_capture',
-          event_data: { email, name, phone },
-        });
+        // Load chat history for this session
+        const chatHistory = await getClientSessionChatHistory(clientSession.id);
+
+        // Track email capture only if this is a new session
+        // (createClientSession now returns existing sessions, so we check if it's new)
+        const isNewSession = !chatHistory || chatHistory.length === 0;
+        if (isNewSession) {
+          await trackAnalyticsEvent({
+            broker_id: publicLink.broker_id,
+            public_link_id: publicLink.id,
+            client_session_id: clientSession.id,
+            event_type: 'email_capture',
+            event_data: { email, name, phone },
+          });
+        }
 
         return NextResponse.json({
-          publicLink,
-          clientSession,
+          link: publicLink,
+          session: {
+            ...clientSession,
+            chat_history: chatHistory,
+          },
         });
       } catch (error) {
         console.error('Error creating client session:', error);
@@ -73,13 +103,96 @@ export async function GET(
     }
 
     return NextResponse.json({
-      publicLink,
-      clientSession: null,
+      link: publicLink,
+      session: null,
     });
   } catch (error) {
     console.error('Error fetching public link:', error);
     return NextResponse.json(
       { error: 'Failed to fetch public link' },
+      { status: 500 },
+    );
+  }
+}
+
+// POST: Create client session (email capture)
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ token: string }> },
+) {
+  try {
+    const { token } = await params;
+    const { client_email, client_name, client_phone } = await request.json();
+
+    if (!token) {
+      return NextResponse.json({ error: 'Missing token' }, { status: 400 });
+    }
+
+    if (!client_email) {
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
+
+    // Get the public link
+    const publicLinkRaw = await getPublicLinkByToken(token);
+
+    if (!publicLinkRaw) {
+      return NextResponse.json(
+        { error: 'Public link not found or inactive' },
+        { status: 404 },
+      );
+    }
+
+    console.log(
+      'Creating client session for:',
+      client_email,
+      'on link:',
+      publicLinkRaw.id,
+    );
+
+    // Create client session
+    const clientSession = await createClientSession({
+      public_link_id: publicLinkRaw.id,
+      client_email,
+      client_name: client_name || undefined,
+      client_phone: client_phone || undefined,
+    });
+
+    console.log('Client session created:', clientSession.id);
+
+    // Load chat history for this session
+    const chatHistory = await getClientSessionChatHistory(clientSession.id);
+
+    console.log('Chat history loaded:', chatHistory?.length || 0, 'messages');
+
+    // Track email capture event only if this is a new session
+    const isNewSession = !chatHistory || chatHistory.length === 0;
+    if (isNewSession) {
+      console.log('Tracking email capture event for new session');
+      await trackAnalyticsEvent({
+        broker_id: publicLinkRaw.broker_id,
+        public_link_id: publicLinkRaw.id,
+        client_session_id: clientSession.id,
+        event_type: 'email_capture',
+        event_data: {
+          email: client_email,
+          name: client_name,
+          phone: client_phone,
+        },
+      });
+    } else {
+      console.log('Existing session found, not tracking email capture');
+    }
+
+    return NextResponse.json({
+      session: {
+        ...clientSession,
+        chat_history: chatHistory,
+      },
+    });
+  } catch (error) {
+    console.error('Error creating client session:', error);
+    return NextResponse.json(
+      { error: 'Failed to create client session' },
       { status: 500 },
     );
   }

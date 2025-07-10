@@ -5,7 +5,7 @@ import {
   getBrokerPublicLinks,
   updatePublicLink,
   deletePublicLink,
-  trackAnalyticsEvent,
+  trackAnalyticsEventSafely,
 } from '@/lib/db/queries';
 
 // POST: Create a new public link
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Track analytics event
-    await trackAnalyticsEvent({
+    await trackAnalyticsEventSafely({
       broker_id,
       public_link_id: publicLink.id,
       event_type: 'link_view',
@@ -48,6 +48,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(publicLink, { status: 201 });
   } catch (error) {
     console.error('Error creating public link:', error);
+
+    // Check if it's a duplicate link error
+    if (error instanceof Error && error.message.includes('already exists')) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 409 }, // Conflict status code
+      );
+    }
+
     return NextResponse.json(
       { error: 'Failed to create public link' },
       { status: 500 },
@@ -68,8 +77,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const publicLinks = await getBrokerPublicLinks(brokerId);
-    return NextResponse.json(publicLinks);
+    const publicLinksRaw = await getBrokerPublicLinks(brokerId);
+
+    // Transform the data to match dashboard expectations
+    const publicLinks = publicLinksRaw.map((link) => ({
+      id: link.id,
+      token: link.public_token,
+      title: link.title,
+      description: link.description,
+      is_active: link.is_active,
+      requires_email: link.requires_email,
+      created_at: link.created_at,
+      view_count: link.client_sessions?.[0]?.count || 0,
+      unique_visitors: link.client_sessions?.[0]?.count || 0, // For now, use same as view_count
+      document_title: link.document_metadata?.title || 'Unknown Document',
+    }));
+
+    return NextResponse.json({ links: publicLinks });
   } catch (error) {
     console.error('Error fetching public links:', error);
     return NextResponse.json(
@@ -107,6 +131,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const brokerId = searchParams.get('broker_id');
 
     if (!id) {
       return NextResponse.json(
@@ -115,7 +140,23 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    if (!brokerId) {
+      return NextResponse.json(
+        { error: 'Missing broker_id parameter' },
+        { status: 400 },
+      );
+    }
+
     await deletePublicLink(id);
+
+    // Track analytics event
+    await trackAnalyticsEventSafely({
+      broker_id: brokerId,
+      public_link_id: id,
+      event_type: 'public_link_delete',
+      event_data: { action: 'deleted' },
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting public link:', error);

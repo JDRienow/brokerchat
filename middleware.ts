@@ -13,7 +13,7 @@ export async function middleware(request: NextRequest) {
     return new Response('pong', { status: 200 });
   }
 
-  if (pathname.startsWith('/api/auth')) {
+  if (pathname.startsWith('/api/auth') || pathname.startsWith('/api/')) {
     return NextResponse.next();
   }
 
@@ -24,8 +24,14 @@ export async function middleware(request: NextRequest) {
   });
 
   if (!token) {
-    // Allow access to register page without authentication
-    if (pathname === '/register') {
+    // Allow access to register, login, forgot password, reset password, and public pages without authentication
+    if (
+      pathname === '/register' ||
+      pathname === '/login' ||
+      pathname === '/forgot-password' ||
+      pathname === '/reset-password' ||
+      pathname.startsWith('/public/')
+    ) {
       return NextResponse.next();
     }
 

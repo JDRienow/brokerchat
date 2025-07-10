@@ -19,6 +19,28 @@ export const user = pgTable('User', {
 
 export type User = InferSelectModel<typeof user>;
 
+export const broker = pgTable('brokers', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  password_hash: text('password_hash').notNull(),
+  first_name: varchar('first_name', { length: 255 }).notNull(),
+  last_name: varchar('last_name', { length: 255 }).notNull(),
+  company_name: varchar('company_name', { length: 255 }),
+  phone: varchar('phone', { length: 50 }),
+  subscription_tier: varchar('subscription_tier', { length: 50 }).default(
+    'basic',
+  ),
+  subscription_status: varchar('subscription_status', { length: 50 }).default(
+    'active',
+  ),
+  reset_token: varchar('reset_token', { length: 255 }),
+  reset_token_expires: timestamp('reset_token_expires'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export type Broker = InferSelectModel<typeof broker>;
+
 export const chat = pgTable('Chat', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   createdAt: timestamp('createdAt').notNull(),

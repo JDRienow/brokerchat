@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -16,6 +16,8 @@ import { toast } from '@/components/toast';
 import { MessageIcon, FileIcon, UserIcon, GlobeIcon } from '@/components/icons';
 import { Chat } from '@/components/chat';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DataStreamProvider } from '@/components/data-stream-provider';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
 interface PublicLinkData {
   id: string;
@@ -23,6 +25,8 @@ interface PublicLinkData {
   description: string;
   document_id: string;
   document_title: string;
+  document_url: string;
+  document_created_at: string;
   broker_name: string;
   broker_company: string;
   requires_email: boolean;
@@ -37,11 +41,18 @@ interface ClientSession {
   token: string;
   client_email?: string;
   client_name?: string;
+  chat_history?: Array<{
+    id: string;
+    role: string;
+    content: string;
+    created_at: string;
+  }>;
 }
 
 export default function PublicLinkPage({
   params,
-}: { params: { token: string } }) {
+}: { params: Promise<{ token: string }> }) {
+  const resolvedParams = use(params);
   const [linkData, setLinkData] = useState<PublicLinkData | null>(null);
   const [session, setSession] = useState<ClientSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,12 +66,12 @@ export default function PublicLinkPage({
 
   useEffect(() => {
     fetchPublicLink();
-  }, [params.token]);
+  }, [resolvedParams.token]);
 
   const fetchPublicLink = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/public-links/${params.token}`, {
+      const response = await fetch(`/api/public-links/${resolvedParams.token}`, {
         credentials: 'include',
       });
 
@@ -100,7 +111,7 @@ export default function PublicLinkPage({
     setSubmitting(true);
 
     try {
-      const response = await fetch(`/api/public-links/${params.token}`, {
+      const response = await fetch(`/api/public-links/${resolvedParams.token}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -168,52 +179,52 @@ export default function PublicLinkPage({
     return null;
   }
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              {linkData.custom_branding?.logo_url ? (
-                <img
-                  src={linkData.custom_branding.logo_url}
-                  alt="Company Logo"
-                  className="h-8 w-8 rounded"
-                />
-              ) : (
-                <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
-                  <GlobeIcon size={16} />
+  if (showEmailForm) {
+    return (
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <header className="border-b bg-white">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                {linkData.custom_branding?.logo_url ? (
+                  <img
+                    src={linkData.custom_branding.logo_url}
+                    alt="Company Logo"
+                    className="h-8 w-8 rounded"
+                  />
+                ) : (
+                  <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
+                    <GlobeIcon size={16} />
+                  </div>
+                )}
+                <div>
+                  <h1 className="text-lg font-semibold">{linkData.title}</h1>
+                  <p className="text-sm text-muted-foreground">
+                    {linkData.broker_company || linkData.broker_name}
+                  </p>
                 </div>
-              )}
-              <div>
-                <h1 className="text-lg font-semibold">{linkData.title}</h1>
-                <p className="text-sm text-muted-foreground">
-                  {linkData.broker_company || linkData.broker_name}
-                </p>
+              </div>
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                <FileIcon size={16} />
+                <span>{linkData.document_title}</span>
               </div>
             </div>
-            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-              <FileIcon size={16} />
-              <span>{linkData.document_title}</span>
-            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          {/* Description */}
-          {linkData.description && (
-            <Card className="mb-6">
-              <CardContent className="pt-6">
-                <p className="text-muted-foreground">{linkData.description}</p>
-              </CardContent>
-            </Card>
-          )}
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto">
+            {/* Description */}
+            {linkData.description && (
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <p className="text-muted-foreground">{linkData.description}</p>
+                </CardContent>
+              </Card>
+            )}
 
-          {/* Email Form */}
-          {showEmailForm && (
+            {/* Email Form */}
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -260,56 +271,71 @@ export default function PublicLinkPage({
                 </form>
               </CardContent>
             </Card>
-          )}
-
-          {/* Chat Interface */}
-          {(!linkData.requires_email || session) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageIcon size={20} />
-                  Chat with Document
-                </CardTitle>
-                <CardDescription>
-                  Ask questions about the document and get instant answers
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[600px] border rounded-lg overflow-hidden">
-                  <Chat
-                    id={linkData.document_id}
-                    initialMessages={[]}
-                    initialChatModel="gpt-4o-mini"
-                    initialVisibilityType="private"
-                    isReadonly={false}
-                    session={session as any}
-                    autoResume={false}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      {/* Footer */}
-      <footer className="border-t bg-muted/50 mt-12">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="text-sm text-muted-foreground">
-              Powered by{' '}
-              <span className="font-medium">
-                {linkData.custom_branding?.company_name ||
-                  linkData.broker_company ||
-                  'Real Estate Platform'}
-              </span>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Secure document sharing and chat
-            </div>
           </div>
         </div>
-      </footer>
+      </div>
+    );
+  }
+
+    // Chat Interface - Full screen like main app
+  return (
+    <div className="flex flex-col h-screen">
+      {/* Minimal Header */}
+      <header className="border-b bg-white p-4 flex items-center justify-between shrink-0">
+        <div className="flex items-center space-x-3">
+          {linkData.custom_branding?.logo_url ? (
+            <img
+              src={linkData.custom_branding.logo_url}
+              alt="Company Logo"
+              className="h-6 w-6 rounded"
+            />
+          ) : (
+            <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
+              <GlobeIcon size={14} />
+            </div>
+          )}
+          <div>
+            <h1 className="font-medium">{linkData.title}</h1>
+            <p className="text-xs text-muted-foreground">
+              {linkData.broker_company || linkData.broker_name}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+          <FileIcon size={14} />
+          <span className="text-xs">{linkData.document_title}</span>
+        </div>
+      </header>
+
+      {/* Full Height Chat - Account for header */}
+      <div className="flex-1 min-h-0">
+        <DataStreamProvider>
+          <SidebarProvider defaultOpen={false}>
+            <SidebarInset className="h-full">
+              <Chat
+                id={linkData.document_id}
+                initialMessages={session?.chat_history ? session.chat_history.map(msg => ({
+                  id: msg.id,
+                  role: msg.role as 'user' | 'assistant',
+                  parts: [{ type: 'text', text: msg.content }],
+                  createdAt: new Date(msg.created_at),
+                })) : []}
+                initialVisibilityType="private"
+                isReadonly={false}
+                session={session as any}
+                autoResume={false}
+                isPublic={true}
+                documentMetadata={{
+                  id: linkData.document_id,
+                  title: linkData.document_title,
+                  url: linkData.document_url,
+                  created_at: linkData.document_created_at,
+                }}
+              />
+            </SidebarInset>
+          </SidebarProvider>
+        </DataStreamProvider>
+      </div>
     </div>
   );
 }

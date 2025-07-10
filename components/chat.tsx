@@ -26,19 +26,26 @@ import { useDataStream } from './data-stream-provider';
 export function Chat({
   id,
   initialMessages,
-  initialChatModel,
   initialVisibilityType,
   isReadonly,
   session,
   autoResume,
+  isPublic = false,
+  documentMetadata,
 }: {
   id: string;
   initialMessages: ChatMessage[];
-  initialChatModel: string;
   initialVisibilityType: VisibilityType;
   isReadonly: boolean;
   session: Session;
   autoResume: boolean;
+  isPublic?: boolean;
+  documentMetadata?: {
+    id: string;
+    title: string;
+    url: string;
+    created_at: string;
+  };
 }) {
   const { visibilityType } = useChatVisibility({
     chatId: id,
@@ -71,7 +78,7 @@ export function Chat({
           body: {
             id,
             message: messages.at(-1),
-            selectedChatModel: initialChatModel,
+            selectedChatModel: 'gpt-4o',
             selectedVisibilityType: visibilityType,
             ...body,
           },
@@ -131,10 +138,11 @@ export function Chat({
       <div className="flex flex-col min-w-0 h-dvh bg-background">
         <ChatHeader
           chatId={id}
-          selectedModelId={initialChatModel}
           selectedVisibilityType={initialVisibilityType}
           isReadonly={isReadonly}
           session={session}
+          isPublic={isPublic}
+          documentMetadata={documentMetadata}
         />
 
         <Messages

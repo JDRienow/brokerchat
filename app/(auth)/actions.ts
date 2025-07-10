@@ -2,8 +2,19 @@
 
 import { z } from 'zod';
 import { hash } from 'bcrypt-ts';
+import { nanoid } from 'nanoid';
 
-import { createBroker, getBrokerByEmail } from '@/lib/db/queries';
+import {
+  createBroker,
+  getBrokerByEmail,
+  createPasswordResetToken,
+  getBrokerByResetToken,
+  clearPasswordResetToken,
+  updateBrokerPassword,
+  trackUserAction,
+  trackPasswordResetAction,
+} from '@/lib/db/queries';
+import { sendPasswordResetEmail } from '@/lib/email';
 
 import { signIn } from './auth';
 
@@ -41,12 +52,164 @@ export const login = async (
       redirect: false,
     });
 
+    // Track login analytics
+    try {
+      const broker = await getBrokerByEmail(validatedData.email);
+      if (broker) {
+        await trackUserAction(broker.id, 'login', {
+          login_method: 'credentials',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (analyticsError) {
+      console.error('Failed to track login analytics:', analyticsError);
+    }
+
     return { status: 'success' };
   } catch (error) {
     if (error instanceof z.ZodError) {
       return { status: 'invalid_data' };
     }
 
+    return { status: 'failed' };
+  }
+};
+
+export interface ForgotPasswordActionState {
+  status:
+    | 'idle'
+    | 'in_progress'
+    | 'success'
+    | 'failed'
+    | 'user_not_found'
+    | 'invalid_data';
+}
+
+export const forgotPassword = async (
+  _: ForgotPasswordActionState,
+  formData: FormData,
+): Promise<ForgotPasswordActionState> => {
+  try {
+    const email = formData.get('email') as string;
+
+    // Validate email
+    const emailSchema = z.string().email();
+    const validatedEmail = emailSchema.parse(email);
+
+    // Check if broker exists
+    const broker = await getBrokerByEmail(validatedEmail);
+    if (!broker) {
+      return { status: 'user_not_found' };
+    }
+
+    // Generate reset token
+    const resetToken = nanoid(32);
+
+    // Save reset token to database
+    await createPasswordResetToken(validatedEmail, resetToken);
+
+    // Send password reset email
+    try {
+      const brokerName = `${broker.first_name} ${broker.last_name}`.trim();
+      await sendPasswordResetEmail(validatedEmail, resetToken, brokerName);
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError);
+      // If email fails, we still return success to avoid revealing if email exists
+      // but log the error for debugging
+    }
+
+    // Track password reset request analytics
+    try {
+      await trackPasswordResetAction(broker.id, 'request', {
+        timestamp: new Date().toISOString(),
+      });
+    } catch (analyticsError) {
+      console.error(
+        'Failed to track password reset request analytics:',
+        analyticsError,
+      );
+    }
+
+    return { status: 'success' };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { status: 'invalid_data' };
+    }
+    console.error('Forgot password error:', error);
+    return { status: 'failed' };
+  }
+};
+
+export interface ResetPasswordActionState {
+  status:
+    | 'idle'
+    | 'in_progress'
+    | 'success'
+    | 'failed'
+    | 'invalid_token'
+    | 'invalid_data';
+}
+
+export const resetPassword = async (
+  _: ResetPasswordActionState,
+  formData: FormData,
+): Promise<ResetPasswordActionState> => {
+  try {
+    const token = formData.get('token') as string;
+    const password = formData.get('password') as string;
+    const confirmPassword = formData.get('confirmPassword') as string;
+
+    // Validate input
+    const schema = z.object({
+      token: z.string().min(1, 'Token is required'),
+      password: z.string().min(6, 'Password must be at least 6 characters'),
+      confirmPassword: z.string().min(6, 'Password confirmation is required'),
+    });
+
+    const validatedData = schema.parse({
+      token,
+      password,
+      confirmPassword,
+    });
+
+    // Check if passwords match
+    if (validatedData.password !== validatedData.confirmPassword) {
+      return { status: 'invalid_data' };
+    }
+
+    // Verify reset token
+    const broker = await getBrokerByResetToken(validatedData.token);
+    if (!broker) {
+      return { status: 'invalid_token' };
+    }
+
+    // Hash new password
+    const hashedPassword = await hash(validatedData.password, 10);
+
+    // Update password and clear reset token
+    await Promise.all([
+      updateBrokerPassword(broker.id, hashedPassword),
+      clearPasswordResetToken(broker.id),
+    ]);
+
+    // Track password reset completion analytics
+    try {
+      await trackPasswordResetAction(broker.id, 'complete', {
+        timestamp: new Date().toISOString(),
+      });
+    } catch (analyticsError) {
+      console.error(
+        'Failed to track password reset completion analytics:',
+        analyticsError,
+      );
+    }
+
+    return { status: 'success' };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { status: 'invalid_data' };
+    }
+    console.error('Reset password error:', error);
     return { status: 'failed' };
   }
 };
@@ -85,7 +248,7 @@ export const register = async (
     const hashedPassword = await hash(validatedData.password, 10);
 
     // Create broker account
-    await createBroker({
+    const newBroker = await createBroker({
       email: validatedData.email,
       password_hash: hashedPassword,
       first_name: validatedData.first_name,
@@ -99,6 +262,18 @@ export const register = async (
       password: validatedData.password,
       redirect: false,
     });
+
+    // Track registration analytics
+    try {
+      await trackUserAction(newBroker.id, 'registration', {
+        registration_method: 'email',
+        has_company: !!validatedData.company_name,
+        has_phone: !!validatedData.phone,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (analyticsError) {
+      console.error('Failed to track registration analytics:', analyticsError);
+    }
 
     return { status: 'success' };
   } catch (error) {

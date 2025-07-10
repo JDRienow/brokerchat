@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/app/(auth)/auth';
 import { BrokerDashboardClient } from '@/components/broker-dashboard-client';
+import { ErrorBoundary } from '@/components/error-boundary';
 
 export default async function BrokerDashboard() {
   const session = await auth();
@@ -10,5 +11,9 @@ export default async function BrokerDashboard() {
     redirect('/login');
   }
 
-  return <BrokerDashboardClient session={session} />;
+  return (
+    <ErrorBoundary>
+      <BrokerDashboardClient session={session} />
+    </ErrorBoundary>
+  );
 }

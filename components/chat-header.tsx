@@ -5,15 +5,15 @@ import { useRouter } from 'next/navigation';
 import { useWindowSize } from 'usehooks-ts';
 import { useEffect, useState } from 'react';
 
-import { ModelSelector } from '@/components/model-selector';
 import { SidebarToggle } from '@/components/sidebar-toggle';
 import { Button } from '@/components/ui/button';
-import { PlusIcon, VercelIcon } from './icons';
+import { PlusIcon, VercelIcon, ArrowLeftIcon } from './icons';
 import { useSidebar } from './ui/sidebar';
 import { memo } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { type VisibilityType, VisibilitySelector } from './visibility-selector';
 import type { Session } from 'next-auth';
+import { ProfilePopover } from './profile-popover';
 
 interface DocumentMetadata {
   id: string;
@@ -24,16 +24,23 @@ interface DocumentMetadata {
 
 function PureChatHeader({
   chatId,
-  selectedModelId,
   selectedVisibilityType,
   isReadonly,
   session,
+  isPublic = false,
+  documentMetadata: externalDocumentMetadata,
 }: {
   chatId: string;
-  selectedModelId: string;
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
   session: Session;
+  isPublic?: boolean;
+  documentMetadata?: {
+    id: string;
+    title: string;
+    url: string;
+    created_at: string;
+  };
 }) {
   const router = useRouter();
   const { open } = useSidebar();
@@ -49,6 +56,13 @@ function PureChatHeader({
     );
 
   useEffect(() => {
+    // If external document metadata is provided (e.g., from public links), use it
+    if (externalDocumentMetadata) {
+      setDocumentMetadata(externalDocumentMetadata);
+      return;
+    }
+
+    // Otherwise, fetch from API if this is a document chat
     if (isDocumentChat) {
       fetch(`/api/document?id=${chatId}`)
         .then((res) => res.json())
@@ -59,13 +73,27 @@ function PureChatHeader({
         })
         .catch(console.error);
     }
-  }, [chatId, isDocumentChat]);
+  }, [chatId, isDocumentChat, externalDocumentMetadata]);
 
   return (
     <header className="flex sticky top-0 bg-background py-1.5 items-center px-2 md:px-2 gap-2">
-      <SidebarToggle />
+      {/* Back to Dashboard Arrow for Document Chats */}
+      {!isPublic && isDocumentChat && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push('/dashboard')}
+          className="flex items-center gap-2 mr-2 z-10"
+        >
+          <ArrowLeftIcon size={16} />
+          Back to Dashboard
+        </Button>
+      )}
 
-      {(!open || windowWidth < 768) && (
+      {/* Sidebar toggle for non-document chats */}
+      {!isPublic && !isDocumentChat && <SidebarToggle />}
+
+      {!isPublic && (!open || windowWidth < 768) && !isDocumentChat && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -84,32 +112,16 @@ function PureChatHeader({
         </Tooltip>
       )}
 
-      {/* Document Information Display */}
+      {/* Document Title - Absolutely Centered */}
       {isDocumentChat && documentMetadata && (
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-2 order-1 md:order-1.5">
-          <h2 className="text-sm font-semibold text-foreground truncate max-w-[200px] md:max-w-[300px]">
+        <div className="absolute left-1/2 -translate-x-1/2 z-0">
+          <h1 className="text-lg font-semibold text-foreground truncate max-w-[300px] md:max-w-[500px] text-center">
             {documentMetadata.title}
-          </h2>
-          <a
-            href={documentMetadata.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-600 hover:text-blue-800 underline"
-          >
-            View PDF
-          </a>
+          </h1>
         </div>
       )}
 
-      {!isReadonly && (
-        <ModelSelector
-          session={session}
-          selectedModelId={selectedModelId}
-          className="order-1 md:order-2"
-        />
-      )}
-
-      {!isReadonly && (
+      {!isReadonly && !isPublic && !isDocumentChat && (
         <VisibilitySelector
           chatId={chatId}
           selectedVisibilityType={selectedVisibilityType}
@@ -117,22 +129,20 @@ function PureChatHeader({
         />
       )}
 
-      <Button
-        className="bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-zinc-50 dark:text-zinc-900 hidden md:flex py-1.5 px-2 h-fit md:h-[34px] order-4 md:ml-auto"
-        asChild
-      >
-        <Link
-          href={`https://vercel.com/new/clone?repository-url=https://github.com/vercel/ai-chatbot&env=AUTH_SECRET&envDescription=Learn more about how to get the API Keys for the application&envLink=https://github.com/vercel/ai-chatbot/blob/main/.env.example&demo-title=AI Chatbot&demo-description=An Open-Source AI Chatbot Template Built With Next.js and the AI SDK by Vercel.&demo-url=https://chat.vercel.ai&products=[{"type":"integration","protocol":"ai","productSlug":"grok","integrationSlug":"xai"},{"type":"integration","protocol":"storage","productSlug":"neon","integrationSlug":"neon"},{"type":"integration","protocol":"storage","productSlug":"upstash-kv","integrationSlug":"upstash"},{"type":"blob"}]`}
-          target="_noblank"
-        >
-          <VercelIcon size={16} />
-          Deploy with Vercel
-        </Link>
-      </Button>
+      {/* Profile Popover - Top Right */}
+      {!isPublic && (
+        <div className="ml-auto z-10">
+          <ProfilePopover user={session?.user} />
+        </div>
+      )}
     </header>
   );
 }
 
 export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
-  return prevProps.selectedModelId === nextProps.selectedModelId;
+  return (
+    prevProps.chatId === nextProps.chatId &&
+    prevProps.isPublic === nextProps.isPublic &&
+    prevProps.documentMetadata === nextProps.documentMetadata
+  );
 });

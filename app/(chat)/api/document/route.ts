@@ -22,7 +22,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(document);
+    // Fix the document URL - files in public directory are served from root
+    const documentWithFixedUrl = {
+      ...document,
+      url: document.url || '#',
+    };
+
+    return NextResponse.json(documentWithFixedUrl);
   } catch (error) {
     console.error('Error fetching document metadata:', error);
     return NextResponse.json(
