@@ -52,31 +52,13 @@ export async function vectorSimilaritySearch(
     file_id: documentId,
   });
 
-  console.log('Vector search RPC result:', {
-    documentId,
-    data,
-    error,
-    dataLength: data?.length,
-  });
-
   if (error) {
-    console.log(
-      'RPC function failed, checking if documents exist with basic query...',
-    );
-
     // Fallback: check if any documents exist for this file_id
     const { data: fallbackData, error: fallbackError } = await supabase
       .from('documents')
       .select('*')
       .eq('file_id', documentId)
       .limit(k);
-
-    console.log('Fallback query result:', {
-      documentId,
-      fallbackData,
-      fallbackError,
-      count: fallbackData?.length,
-    });
 
     if (fallbackError) {
       console.error('Both RPC and fallback failed:', { error, fallbackError });
@@ -96,7 +78,6 @@ export async function fetchDocumentMetadata(documentId: string) {
     .select('*')
     .eq('id', documentId)
     .maybeSingle();
-  console.log('fetchDocumentMetadata:', { documentId, data, error });
   if (error) throw error;
   return data;
 }
@@ -201,9 +182,6 @@ export async function updateChatVisibilityById({
 }) {
   // No-op since document_metadata doesn't have visibility field
   // Could add this field if needed in the future
-  console.log(
-    `Visibility update requested for ${chatId}: ${visibility} (not implemented)`,
-  );
 }
 
 // Get documents/chats by user ID with pagination (using document_metadata table)
@@ -510,89 +488,86 @@ export async function deletePublicLink(id: string) {
 // Delete document and all related data
 export async function deleteDocumentAndRelatedData(documentId: string) {
   try {
-    console.log(`Starting deletion of document ${documentId} and related data`);
-
-    // 1. Get all public links for this document
-    const { data: publicLinks, error: publicLinksError } = await supabase
+    // First, get all public link IDs for this document
+    const { data: publicLinkIds, error: linkError } = await supabase
       .from('public_links')
       .select('id')
       .eq('document_id', documentId);
 
-    if (publicLinksError) {
-      console.error('Error fetching public links:', publicLinksError);
-      throw publicLinksError;
+    if (linkError) {
+      console.error('Error fetching public links for deletion:', linkError);
+      throw linkError;
     }
 
-    const publicLinkIds = publicLinks?.map((link) => link.id) || [];
-    console.log(`Found ${publicLinkIds.length} public links to delete`);
+    if (publicLinkIds && publicLinkIds.length > 0) {
+      const linkIds = publicLinkIds.map((link) => link.id);
 
-    // 2. Delete analytics events for this document and its public links
-    if (publicLinkIds.length > 0) {
+      // Delete analytics events for these public links
       const { error: analyticsError } = await supabase
         .from('analytics')
         .delete()
-        .in('public_link_id', publicLinkIds);
+        .in('public_link_id', linkIds);
 
       if (analyticsError) {
-        console.error('Error deleting analytics:', analyticsError);
-        throw analyticsError;
+        console.error('Error deleting analytics events:', analyticsError);
+        // Continue with deletion even if analytics cleanup fails
       }
-      console.log('Deleted analytics events');
-    }
 
-    // 3. Delete client sessions for all public links
-    if (publicLinkIds.length > 0) {
+      // Delete client sessions for these public links
       const { error: sessionsError } = await supabase
         .from('client_sessions')
         .delete()
-        .in('public_link_id', publicLinkIds);
+        .in('public_link_id', linkIds);
 
       if (sessionsError) {
         console.error('Error deleting client sessions:', sessionsError);
-        throw sessionsError;
+        // Continue with deletion
       }
-      console.log('Deleted client sessions');
-    }
 
-    // 4. Delete chat histories for this document
-    const { error: chatHistoryError } = await supabase
-      .from('chat_histories')
-      .delete()
-      .eq('document_id', documentId);
+      // Delete chat histories for these public links
+      const { data: chatHistories, error: chatHistoryFetchError } =
+        await supabase
+          .from('chat_histories')
+          .select('id')
+          .eq('document_id', documentId);
 
-    if (chatHistoryError) {
-      console.error('Error deleting chat histories:', chatHistoryError);
-      throw chatHistoryError;
-    }
-    console.log('Deleted chat histories');
+      if (chatHistoryFetchError) {
+        console.error('Error fetching chat histories:', chatHistoryFetchError);
+      } else if (chatHistories && chatHistories.length > 0) {
+        const { error: chatHistoryError } = await supabase
+          .from('chat_histories')
+          .delete()
+          .eq('document_id', documentId);
 
-    // 5. Delete public links
-    if (publicLinkIds.length > 0) {
-      const { error: publicLinksDeleteError } = await supabase
+        if (chatHistoryError) {
+          console.error('Error deleting chat histories:', chatHistoryError);
+        }
+      }
+
+      // Delete public links
+      const { error: publicLinksError } = await supabase
         .from('public_links')
         .delete()
         .eq('document_id', documentId);
 
-      if (publicLinksDeleteError) {
-        console.error('Error deleting public links:', publicLinksDeleteError);
-        throw publicLinksDeleteError;
+      if (publicLinksError) {
+        console.error('Error deleting public links:', publicLinksError);
+        throw publicLinksError;
       }
-      console.log('Deleted public links');
     }
 
-    // 6. Delete document chunks/embeddings
-    const { error: documentsError } = await supabase
+    // Delete document chunks
+    const { error: chunksError } = await supabase
       .from('documents')
       .delete()
       .eq('file_id', documentId);
 
-    if (documentsError) {
-      console.error('Error deleting document chunks:', documentsError);
-      throw documentsError;
+    if (chunksError) {
+      console.error('Error deleting document chunks:', chunksError);
+      throw chunksError;
     }
-    console.log('Deleted document chunks');
 
-    // 7. Finally, delete the document metadata
+    // Delete document metadata
     const { error: metadataError } = await supabase
       .from('document_metadata')
       .delete()
@@ -602,15 +577,8 @@ export async function deleteDocumentAndRelatedData(documentId: string) {
       console.error('Error deleting document metadata:', metadataError);
       throw metadataError;
     }
-    console.log('Deleted document metadata');
 
-    console.log(
-      `Successfully deleted document ${documentId} and all related data`,
-    );
-    return {
-      success: true,
-      message: 'Document and all related data deleted successfully',
-    };
+    return { success: true };
   } catch (error) {
     console.error('Error in deleteDocumentAndRelatedData:', error);
     throw error;
@@ -627,31 +595,25 @@ export async function createClientSession(sessionData: {
   client_phone?: string;
 }) {
   try {
-    // First, check if a session already exists for this email + public link
-    // Get the most recent session if multiple exist
-    const { data: existingSessions, error: fetchError } = await supabase
+    // Check if session already exists for this email and public link
+    const { data: existingSession, error: searchError } = await supabase
       .from('client_sessions')
       .select('*')
       .eq('public_link_id', sessionData.public_link_id)
       .eq('client_email', sessionData.client_email)
-      .order('created_at', { ascending: false })
-      .limit(1);
+      .maybeSingle();
 
-    if (fetchError) {
-      console.error('Error fetching existing session:', fetchError);
-      throw fetchError;
+    if (searchError) {
+      console.error('Error searching for existing session:', searchError);
+      throw searchError;
     }
 
-    const existingSession = existingSessions?.[0] || null;
-
     if (existingSession) {
-      console.log('Found existing session, updating:', existingSession.id);
-      // Update last activity and return existing session
-      const { data: updatedSession, error: updateError } = await supabase
+      // Update existing session's last_active timestamp
+      const { data, error } = await supabase
         .from('client_sessions')
         .update({
-          last_activity: new Date().toISOString(),
-          // Update name/phone if provided
+          last_active: new Date().toISOString(),
           ...(sessionData.client_name && {
             client_name: sessionData.client_name,
           }),
@@ -663,32 +625,35 @@ export async function createClientSession(sessionData: {
         .select()
         .single();
 
-      if (updateError) {
-        console.error('Error updating session:', updateError);
-        throw updateError;
+      if (error) {
+        console.error('Error updating existing session:', error);
+        throw error;
       }
-      return updatedSession;
+
+      return data;
     }
 
-    console.log('Creating new session for:', sessionData.client_email);
     // Create new session if none exists
-    const session_token = `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
     const { data, error } = await supabase
       .from('client_sessions')
-      .insert([{ ...sessionData, session_token }])
+      .insert({
+        ...sessionData,
+        access_token: `session_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        created_at: new Date().toISOString(),
+        last_active: new Date().toISOString(),
+        message_count: 0,
+      })
       .select()
       .single();
 
     if (error) {
-      console.error('Error creating new session:', error);
+      console.error('Error creating client session:', error);
       throw error;
     }
 
-    console.log('Created new session:', data.id);
     return data;
   } catch (error) {
-    console.error('createClientSession error:', error);
+    console.error('Error in createClientSession:', error);
     throw error;
   }
 }

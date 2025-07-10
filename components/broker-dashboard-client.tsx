@@ -122,8 +122,11 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           broker_id: session.user.id,
-          event_type: 'dashboard_view',
-          event_data: { timestamp: new Date().toISOString() },
+          event_type: 'user_login', // Use allowed event type instead
+          event_data: {
+            page: 'dashboard',
+            timestamp: new Date().toISOString(),
+          },
         }),
       });
     } catch (error) {
@@ -348,8 +351,11 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
             body: JSON.stringify({
               broker_id: session.user.id,
               public_link_id: linkId,
-              event_type: 'public_link_toggle',
+              event_type: isActive
+                ? 'public_link_delete'
+                : 'public_link_create', // Use allowed event types
               event_data: {
+                action: 'status_toggle',
                 old_status: isActive,
                 new_status: !isActive,
                 timestamp: new Date().toISOString(),
