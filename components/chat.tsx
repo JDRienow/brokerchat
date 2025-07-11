@@ -55,6 +55,34 @@ export function Chat({
 
   const [input, setInput] = useState<string>('');
 
+  // For public links, show a simple message instead of full chat
+  if (isPublic) {
+    return (
+      <div className="flex flex-col min-w-0 h-dvh bg-background">
+        <ChatHeader
+          chatId={id}
+          selectedVisibilityType={initialVisibilityType}
+          isReadonly={isReadonly}
+          session={session}
+          isPublic={isPublic}
+          documentMetadata={documentMetadata}
+        />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center max-w-md">
+            <h2 className="text-xl font-semibold mb-4">Chat on Desktop</h2>
+            <p className="text-muted-foreground mb-4">
+              For the best experience, please access this document chat on a
+              desktop browser.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Mobile chat support coming soon!
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const {
     messages,
     setMessages,
