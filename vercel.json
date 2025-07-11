@@ -1,12 +1,8 @@
 {
   "functions": {
-    "app/(chat)/api/process-document/**": {
+    "app/(chat)/api/process-document/route.ts": {
       "maxDuration": 60
-    },
-    "app/(chat)/api/files/upload/**": {
-      "maxDuration": 30
     }
   },
-  "regions": ["iad1"],
   "framework": "nextjs"
 } 

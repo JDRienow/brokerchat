@@ -9,6 +9,11 @@ import type { NextRequest } from 'next/server';
 const OPENAI_EMBEDDING_MODEL =
   process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 
+// Configure route segment for larger payloads
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 // Simple text chunking function
 function chunkText(text: string, maxChunkSize = 1000): string[] {
   const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
@@ -69,14 +74,6 @@ export async function POST(request: NextRequest) {
     const contentLength = request.headers.get('content-length');
     console.log('Request content-length:', contentLength);
 
-    if (contentLength && Number.parseInt(contentLength) > 30 * 1024 * 1024) {
-      console.log('Request too large, content-length:', contentLength);
-      return Response.json(
-        { error: 'File too large. Maximum size is 30MB.' },
-        { status: 413 },
-      );
-    }
-
     // Create dummy test file before importing pdf-parse
     await createDummyTestFile();
 
@@ -90,6 +87,15 @@ export async function POST(request: NextRequest) {
         size: file.size,
         type: file.type,
       });
+
+      // Check file size after receiving it
+      if (file.size > 30 * 1024 * 1024) {
+        console.log('File too large after parsing:', file.size);
+        return Response.json(
+          { error: 'File too large. Maximum size is 30MB.' },
+          { status: 413 },
+        );
+      }
     }
     const existingDocumentId = formData.get('existingDocumentId') as
       | string

@@ -19,12 +19,8 @@ const nextConfig: NextConfig = {
     // Disable TypeScript checking during builds for MVP deployment
     ignoreBuildErrors: true,
   },
-  // Configure API route body size limits
-  api: {
-    bodyParser: {
-      sizeLimit: '30mb',
-    },
-  },
+  // Note: App Router doesn't use the api.bodyParser config
+  // Individual route configurations are handled in the route files
 };
 
 export default nextConfig;
