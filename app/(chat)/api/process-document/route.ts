@@ -9,7 +9,7 @@ import type { NextRequest } from 'next/server';
 const OPENAI_EMBEDDING_MODEL =
   process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 
-// Configure route segment for larger payloads
+// Configure route segment for larger payloads - Pro plan enabled
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
