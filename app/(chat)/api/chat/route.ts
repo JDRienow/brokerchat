@@ -3,6 +3,10 @@ import {
   fetchDocumentMetadata,
   vectorSimilaritySearch,
   insertChatMessage,
+  insertChatMessageWithSession,
+  getClientSessionByToken,
+  updateClientSessionActivity,
+  trackAnalyticsEvent,
 } from '@/lib/db/queries';
 import type { NextRequest } from 'next/server';
 
@@ -10,14 +14,34 @@ const OPENAI_EMBEDDING_MODEL =
   process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 
 export async function POST(request: NextRequest) {
+  // Check for broker authentication
   const session = await auth();
-  if (!session?.user) {
+
+  // Check for public client session in request body
+  const requestBody = await request.json();
+  const { id: chatId, message, selectedChatModel, sessionToken } = requestBody;
+
+  let isPublicUser = false;
+  let publicSession = null;
+
+  // If no broker session, check for public client session
+  if (!session?.user && sessionToken) {
+    try {
+      publicSession = await getClientSessionByToken(sessionToken);
+      if (publicSession?.public_link?.is_active) {
+        isPublicUser = true;
+      }
+    } catch (error) {
+      console.error('Error verifying client session:', error);
+    }
+  }
+
+  // Require either broker session or valid public session
+  if (!session?.user && !isPublicUser) {
     return new Response('Unauthorized', { status: 401 });
   }
 
   try {
-    const { id: chatId, message, selectedChatModel } = await request.json();
-
     if (!message?.parts?.length) {
       return new Response('Invalid message format', { status: 400 });
     }
@@ -176,12 +200,47 @@ Note: The document content chunks are not yet processed in the database. I can o
                   // Save chat history when streaming is complete
                   if (isDocumentChat && fullResponse) {
                     try {
-                      await insertChatMessage(chatId, 'user', userMessage);
-                      await insertChatMessage(
-                        chatId,
-                        'assistant',
-                        fullResponse,
-                      );
+                      if (isPublicUser && publicSession) {
+                        // Save with client session for public users
+                        await insertChatMessageWithSession(
+                          chatId,
+                          'user',
+                          userMessage,
+                          publicSession.id,
+                        );
+                        await insertChatMessageWithSession(
+                          chatId,
+                          'assistant',
+                          fullResponse,
+                          publicSession.id,
+                        );
+
+                        // Update session activity and track analytics
+                        await updateClientSessionActivity(
+                          publicSession.id,
+                          publicSession.total_messages + 2,
+                        );
+
+                        await trackAnalyticsEvent({
+                          broker_id: publicSession.public_link.broker_id,
+                          public_link_id: publicSession.public_link.id,
+                          client_session_id: publicSession.id,
+                          event_type: 'chat_message',
+                          event_data: {
+                            message_count: 2,
+                            user_message_length: userMessage.length,
+                            assistant_message_length: fullResponse.length,
+                          },
+                        });
+                      } else {
+                        // Save normally for broker users
+                        await insertChatMessage(chatId, 'user', userMessage);
+                        await insertChatMessage(
+                          chatId,
+                          'assistant',
+                          fullResponse,
+                        );
+                      }
                     } catch (error) {
                       console.error('Failed to save chat history:', error);
                     }

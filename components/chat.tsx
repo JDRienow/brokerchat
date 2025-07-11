@@ -55,36 +55,6 @@ export function Chat({
 
   const [input, setInput] = useState<string>('');
 
-  // Temporary fix: Show coming soon message for all public links
-  if (isPublic) {
-    return (
-      <div className="flex flex-col min-w-0 h-dvh bg-background">
-        <ChatHeader
-          chatId={id}
-          selectedVisibilityType={initialVisibilityType}
-          isReadonly={isReadonly}
-          session={session}
-          isPublic={isPublic}
-          documentMetadata={documentMetadata}
-        />
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center max-w-md">
-            <h2 className="text-xl font-semibold mb-4">
-              Public Chat Coming Soon
-            </h2>
-            <p className="text-muted-foreground mb-4">
-              The public document chat feature is being enhanced for better
-              performance.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Please check back in a few minutes!
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const {
     messages,
     setMessages,
@@ -108,6 +78,8 @@ export function Chat({
             message: messages.at(-1),
             selectedChatModel: 'gpt-4o',
             selectedVisibilityType: visibilityType,
+            ...(isPublic &&
+              session && { sessionToken: (session as any).token }),
             ...body,
           },
         };
@@ -147,7 +119,7 @@ export function Chat({
   }, [query, sendMessage, hasAppendedQuery, id]);
 
   const { data: votes } = useSWR<Array<Vote>>(
-    messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
+    messages.length >= 2 && !isPublic ? `/api/vote?chatId=${id}` : null,
     fetcher,
   );
 
