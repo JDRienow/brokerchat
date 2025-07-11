@@ -283,8 +283,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
 
         // Refresh dashboard data to show new document
         await fetchDashboardData();
-        // Switch to documents tab to show the new document
-        setActiveTab('documents');
+        // Stay on upload tab for better UX
       }
     } catch (error) {
       setResult({
