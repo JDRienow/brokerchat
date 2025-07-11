@@ -201,13 +201,13 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Check file size (max 25MB - generous limit for MVP)
-      const maxSize = 25 * 1024 * 1024; // 25MB in bytes
+      // Check file size (max 50MB - Vercel Pro limit)
+      const maxSize = 50 * 1024 * 1024; // 50MB in bytes
       if (file.size > maxSize) {
         setResult({
           success: false,
           message: 'File size too large',
-          error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds the maximum allowed size of 25MB. Please choose a smaller file.`,
+          error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds the maximum allowed size of 50MB. Please choose a smaller file.`,
         });
         return;
       }
@@ -242,7 +242,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
         // Handle specific HTTP errors
         if (response.status === 413) {
           throw new Error(
-            'File too large. Please choose a smaller PDF file (max 25MB).',
+            'File too large. Please choose a smaller PDF file (max 50MB).',
           );
         } else if (response.status === 504) {
           throw new Error(

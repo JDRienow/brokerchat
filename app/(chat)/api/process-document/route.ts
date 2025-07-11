@@ -89,10 +89,10 @@ export async function POST(request: NextRequest) {
       });
 
       // Check file size after receiving it
-      if (file.size > 30 * 1024 * 1024) {
+      if (file.size > 50 * 1024 * 1024) {
         console.log('File too large after parsing:', file.size);
         return Response.json(
-          { error: 'File too large. Maximum size is 30MB.' },
+          { error: 'File too large. Maximum size is 50MB.' },
           { status: 413 },
         );
       }
