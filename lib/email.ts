@@ -1,12 +1,19 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 export async function sendPasswordResetEmail(
   email: string,
   resetToken: string,
   brokerName: string,
 ) {
+  if (!resend) {
+    console.warn('Resend API key not configured, skipping email send');
+    return { message: 'Email service not configured' };
+  }
+
   const resetUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
 
   try {
