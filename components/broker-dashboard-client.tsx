@@ -201,16 +201,22 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Check file size (max 10MB for better user experience)
-      const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+      // Check file size (max 25MB - generous limit for MVP)
+      const maxSize = 25 * 1024 * 1024; // 25MB in bytes
       if (file.size > maxSize) {
         setResult({
           success: false,
           message: 'File size too large',
-          error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds the maximum allowed size of 10MB. Please choose a smaller file.`,
+          error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds the maximum allowed size of 25MB. Please choose a smaller file.`,
         });
         return;
       }
+
+      console.log('File selected:', {
+        name: file.name,
+        size: file.size,
+        sizeInMB: (file.size / 1024 / 1024).toFixed(2),
+      });
 
       setSelectedFile(file);
       setResult(null);
@@ -236,7 +242,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
         // Handle specific HTTP errors
         if (response.status === 413) {
           throw new Error(
-            'File too large. Please choose a smaller PDF file (max 10MB).',
+            'File too large. Please choose a smaller PDF file (max 25MB).',
           );
         } else if (response.status === 504) {
           throw new Error(

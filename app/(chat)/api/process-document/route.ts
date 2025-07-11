@@ -69,10 +69,10 @@ export async function POST(request: NextRequest) {
     const contentLength = request.headers.get('content-length');
     console.log('Request content-length:', contentLength);
 
-    if (contentLength && Number.parseInt(contentLength) > 15 * 1024 * 1024) {
+    if (contentLength && Number.parseInt(contentLength) > 30 * 1024 * 1024) {
       console.log('Request too large, content-length:', contentLength);
       return Response.json(
-        { error: 'File too large. Maximum size is 15MB.' },
+        { error: 'File too large. Maximum size is 30MB.' },
         { status: 413 },
       );
     }
