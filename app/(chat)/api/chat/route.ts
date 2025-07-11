@@ -26,10 +26,18 @@ export async function POST(request: NextRequest) {
 
   // If no broker session, check for public client session
   if (!session?.user && sessionToken) {
+    console.log(
+      'Checking public session with token:',
+      sessionToken ? 'present' : 'missing',
+    );
     try {
       publicSession = await getClientSessionByToken(sessionToken);
+      console.log('Public session found:', publicSession ? 'yes' : 'no');
       if (publicSession?.public_link?.is_active) {
+        console.log('Public link is active');
         isPublicUser = true;
+      } else {
+        console.log('Public link inactive or not found');
       }
     } catch (error) {
       console.error('Error verifying client session:', error);

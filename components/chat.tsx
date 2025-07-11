@@ -72,14 +72,22 @@ export function Chat({
       api: '/api/chat',
       fetch: fetchWithErrorHandlers,
       prepareSendMessagesRequest({ messages, id, body }) {
+        const sessionToken =
+          isPublic && session ? (session as any).session_token : undefined;
+        if (isPublic) {
+          console.log(
+            'Public chat - session token:',
+            sessionToken ? 'present' : 'missing',
+          );
+        }
+
         return {
           body: {
             id,
             message: messages.at(-1),
             selectedChatModel: 'gpt-4o',
             selectedVisibilityType: visibilityType,
-            ...(isPublic &&
-              session && { sessionToken: (session as any).token }),
+            ...(sessionToken && { sessionToken }),
             ...body,
           },
         };
