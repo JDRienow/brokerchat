@@ -201,6 +201,17 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Check file size (max 10MB for better user experience)
+      const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+      if (file.size > maxSize) {
+        setResult({
+          success: false,
+          message: 'File size too large',
+          error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds the maximum allowed size of 10MB. Please choose a smaller file.`,
+        });
+        return;
+      }
+
       setSelectedFile(file);
       setResult(null);
     }
@@ -220,6 +231,23 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
         method: 'POST',
         body: formData,
       });
+
+      if (!response.ok) {
+        // Handle specific HTTP errors
+        if (response.status === 413) {
+          throw new Error(
+            'File too large. Please choose a smaller PDF file (max 10MB).',
+          );
+        } else if (response.status === 504) {
+          throw new Error(
+            'Upload timeout. Please try again with a smaller file.',
+          );
+        } else {
+          throw new Error(
+            `Upload failed with status ${response.status}. Please try again.`,
+          );
+        }
+      }
 
       const data = await response.json();
       setResult(data);
