@@ -220,9 +220,14 @@ Note: The document content chunks are not yet processed in the database. I can o
 
     return new Response(stream, {
       headers: {
-        'Content-Type': 'text/plain',
-        'Cache-Control': 'no-cache',
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
         Connection: 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'X-Accel-Buffering': 'no', // Disable nginx buffering
+        'Transfer-Encoding': 'chunked',
       },
     });
   } catch (error) {

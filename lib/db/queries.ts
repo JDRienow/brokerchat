@@ -615,11 +615,11 @@ export async function createClientSession(sessionData: {
     }
 
     if (existingSession) {
-      // Update existing session's last_active timestamp
+      // Update existing session's last_activity timestamp
       const { data, error } = await supabase
         .from('client_sessions')
         .update({
-          last_active: new Date().toISOString(),
+          last_activity: new Date().toISOString(),
           ...(sessionData.client_name && {
             client_name: sessionData.client_name,
           }),
