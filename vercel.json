@@ -2,6 +2,9 @@
   "functions": {
     "app/(chat)/api/process-document/route.ts": {
       "maxDuration": 60
+    },
+    "app/(chat)/api/test-upload/route.ts": {
+      "maxDuration": 30
     }
   },
   "framework": "nextjs"
