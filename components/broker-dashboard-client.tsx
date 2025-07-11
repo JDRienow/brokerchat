@@ -31,6 +31,7 @@ import {
 } from '@/components/icons';
 import { toast } from '@/components/toast';
 import { ProfilePopover } from '@/components/profile-popover';
+import { uploadFileToStorage } from '@/lib/supabase-storage';
 import type { Session } from 'next-auth';
 
 interface Document {
@@ -43,6 +44,7 @@ interface Document {
 
 interface PublicLink {
   id: string;
+  document_id: string;
   token: string;
   title: string;
   description: string;
@@ -230,12 +232,28 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
     setResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
+      // Step 1: Upload file to Supabase Storage
+      console.log('Uploading file to Supabase Storage...');
+      const uploadData = await uploadFileToStorage(
+        selectedFile,
+        session.user.id,
+      );
 
+      console.log('File uploaded to storage successfully:', uploadData);
+
+      // Step 2: Send file URL to backend for processing
       const response = await fetch('/api/process-document', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileUrl: uploadData.url,
+          fileName: uploadData.fileName,
+          fileSize: uploadData.fileSize,
+          fileType: uploadData.fileType,
+          storagePath: uploadData.path,
+        }),
       });
 
       if (!response.ok) {
@@ -246,11 +264,11 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
           );
         } else if (response.status === 504) {
           throw new Error(
-            'Upload timeout. Please try again with a smaller file.',
+            'Processing timeout. Please try again with a smaller file.',
           );
         } else {
           throw new Error(
-            `Upload failed with status ${response.status}. Please try again.`,
+            `Processing failed with status ${response.status}. Please try again.`,
           );
         }
       }
@@ -273,6 +291,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
                 chunk_count: data.chunks,
                 file_size: selectedFile?.size,
                 file_type: selectedFile?.type,
+                storage_url: uploadData.url,
                 timestamp: new Date().toISOString(),
               },
             }),
@@ -288,7 +307,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
     } catch (error) {
       setResult({
         success: false,
-        message: 'Failed to upload file',
+        message: 'Failed to upload and process file',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     } finally {
@@ -420,11 +439,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
 
   // Helper function to check if a document has a public link
   const getPublicLinkForDocument = (documentId: string) => {
-    return publicLinks.find((link) => {
-      // We need to match by document title since the API response uses document_title
-      const doc = documents.find((d) => d.id === documentId);
-      return doc && link.document_title === doc.title;
-    });
+    return publicLinks.find((link) => link.document_id === documentId);
   };
 
   const deletePublicLink = async (linkId: string, title: string) => {

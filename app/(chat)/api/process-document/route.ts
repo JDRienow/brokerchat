@@ -77,44 +77,115 @@ export async function POST(request: NextRequest) {
     // Create dummy test file before importing pdf-parse
     await createDummyTestFile();
 
-    console.log('Attempting to parse form data...');
-    const formData = await request.formData();
-    const file = formData.get('file') as File | null;
+    const contentType = request.headers.get('content-type');
 
-    if (file) {
-      console.log('File details:', {
-        name: file.name,
-        size: file.size,
-        type: file.type,
+    let file: File | null = null;
+    let existingDocumentId: string | null = null;
+    let fileUrl: string | null = null;
+    let fileName: string | null = null;
+    let fileSize: number | null = null;
+    let fileType: string | null = null;
+
+    if (contentType?.includes('application/json')) {
+      // New Supabase Storage flow - receive file URL instead of file data
+      console.log('Processing JSON request with Supabase Storage URL...');
+      const body = await request.json();
+      fileUrl = body.fileUrl;
+      fileName = body.fileName;
+      fileSize = body.fileSize;
+      fileType = body.fileType;
+      existingDocumentId = body.existingDocumentId;
+
+      console.log('File details from Supabase Storage:', {
+        url: fileUrl,
+        name: fileName,
+        size: fileSize,
+        type: fileType,
       });
 
-      // Check file size after receiving it
-      if (file.size > 50 * 1024 * 1024) {
-        console.log('File too large after parsing:', file.size);
+      // Check file size
+      if (fileSize && fileSize > 100 * 1024 * 1024) {
+        // 100MB limit for Supabase Storage
+        console.log('File too large:', fileSize);
         return Response.json(
-          { error: 'File too large. Maximum size is 50MB.' },
+          { error: 'File too large. Maximum size is 100MB.' },
           { status: 413 },
         );
       }
+    } else {
+      // Legacy FormData flow (kept for compatibility)
+      console.log('Attempting to parse form data...');
+      const formData = await request.formData();
+      file = formData.get('file') as File | null;
+      existingDocumentId = formData.get('existingDocumentId') as string | null;
+
+      if (file) {
+        console.log('File details:', {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+        });
+
+        // Check file size after receiving it
+        if (file.size > 50 * 1024 * 1024) {
+          console.log('File too large after parsing:', file.size);
+          return Response.json(
+            { error: 'File too large. Maximum size is 50MB.' },
+            { status: 413 },
+          );
+        }
+      }
     }
-    const existingDocumentId = formData.get('existingDocumentId') as
-      | string
-      | null;
 
     let documentId: string;
     let title: string;
     let extractedText: string;
 
-    if (file) {
-      // Process uploaded file
-      console.log('Processing uploaded file:', file.name);
-      title = file.name.replace('.pdf', '');
+    if (file || fileUrl) {
+      let pdfBuffer: Buffer;
+      let actualFileName: string;
 
-      // Read file buffer
-      const arrayBuffer = await file.arrayBuffer();
-      const pdfBuffer = Buffer.from(arrayBuffer);
+      if (fileUrl && fileName) {
+        // New flow: Download file from Supabase Storage
+        console.log('Downloading file from Supabase Storage:', fileUrl);
+        title = fileName.replace('.pdf', '');
+        actualFileName = fileName;
 
-      // Extract text from PDF
+        try {
+          const response = await fetch(fileUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to download file: ${response.status}`);
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          pdfBuffer = Buffer.from(arrayBuffer);
+          console.log('Successfully downloaded file, size:', pdfBuffer.length);
+        } catch (error) {
+          console.error('Error downloading file from storage:', error);
+          return Response.json(
+            {
+              error: 'Failed to download file from storage',
+              details: error instanceof Error ? error.message : 'Unknown error',
+            },
+            { status: 500 },
+          );
+        }
+      } else if (file) {
+        // Legacy flow: Use uploaded file directly
+        console.log('Processing uploaded file:', file.name);
+        title = file.name.replace('.pdf', '');
+        actualFileName = file.name;
+
+        // Read file buffer
+        const arrayBuffer = await file.arrayBuffer();
+        pdfBuffer = Buffer.from(arrayBuffer);
+      } else {
+        return Response.json(
+          { error: 'No file or file URL provided' },
+          { status: 400 },
+        );
+      }
+
+      // Extract text from PDF (same for both flows)
       console.log('Extracting text from PDF...');
       try {
         const pdfParse = (await import('pdf-parse')).default;
@@ -140,8 +211,9 @@ export async function POST(request: NextRequest) {
       try {
         const metadata = await insertDocumentMetadataWithBroker(
           title,
-          file.name,
+          actualFileName,
           session.user.id,
+          fileUrl || undefined, // Pass storage URL if available
         );
         console.log('Metadata result:', metadata);
 
@@ -181,7 +253,7 @@ export async function POST(request: NextRequest) {
       console.log('Using placeholder text for existing document');
     } else {
       return Response.json(
-        { error: 'No file or document ID provided' },
+        { error: 'No file, file URL, or document ID provided' },
         { status: 400 },
       );
     }

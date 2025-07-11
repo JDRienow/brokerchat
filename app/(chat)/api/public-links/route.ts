@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
     // Transform the data to match dashboard expectations
     const publicLinks = publicLinksRaw.map((link) => ({
       id: link.id,
+      document_id: link.document_id, // Include document_id for proper matching
       token: link.public_token,
       title: link.title,
       description: link.description,

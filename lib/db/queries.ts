@@ -365,14 +365,30 @@ export async function clearPasswordResetToken(id: string) {
 export async function getBrokerDocuments(brokerId: string) {
   const { data, error } = await supabase
     .from('document_metadata')
-    .select(`
-      *,
-      documents:documents(count)
-    `)
+    .select('*')
     .eq('broker_id', brokerId)
     .order('created_at', { ascending: false });
+
   if (error) throw error;
-  return data;
+
+  // For each document, get chunk count separately
+  const documentsWithChunks = await Promise.all(
+    (data || []).map(async (doc) => {
+      const { data: chunks, error: chunkError } = await supabase
+        .from('documents')
+        .select('id')
+        .eq('file_id', doc.id);
+
+      const chunkCount = chunkError ? 0 : chunks?.length || 0;
+
+      return {
+        ...doc,
+        chunk_count: chunkCount,
+      };
+    }),
+  );
+
+  return documentsWithChunks;
 }
 
 // ==================== PUBLIC LINK FUNCTIONS ====================
@@ -628,10 +644,8 @@ export async function createClientSession(sessionData: {
       .from('client_sessions')
       .insert({
         ...sessionData,
-        access_token: `session_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        created_at: new Date().toISOString(),
-        last_active: new Date().toISOString(),
-        message_count: 0,
+        session_token: `session_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        // created_at, first_visit, last_activity, total_messages have defaults in schema
       })
       .select()
       .single();
@@ -1174,10 +1188,18 @@ export async function insertDocumentMetadataWithBroker(
   title: string,
   url: string,
   brokerId: string,
+  storageUrl?: string,
 ) {
+  const insertData: any = { title, url, broker_id: brokerId };
+
+  // Add storage_url if provided (for Supabase Storage files)
+  if (storageUrl) {
+    insertData.storage_url = storageUrl;
+  }
+
   const { data, error } = await supabase
     .from('document_metadata')
-    .insert([{ title, url, broker_id: brokerId }])
+    .insert([insertData])
     .select()
     .single();
   if (error) throw error;
