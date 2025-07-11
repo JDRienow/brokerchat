@@ -55,7 +55,7 @@ export function Chat({
 
   const [input, setInput] = useState<string>('');
 
-  // For public links, show a simple message instead of full chat
+  // Temporary fix: Show coming soon message for all public links
   if (isPublic) {
     return (
       <div className="flex flex-col min-w-0 h-dvh bg-background">
@@ -69,13 +69,15 @@ export function Chat({
         />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center max-w-md">
-            <h2 className="text-xl font-semibold mb-4">Chat on Desktop</h2>
+            <h2 className="text-xl font-semibold mb-4">
+              Public Chat Coming Soon
+            </h2>
             <p className="text-muted-foreground mb-4">
-              For the best experience, please access this document chat on a
-              desktop browser.
+              The public document chat feature is being enhanced for better
+              performance.
             </p>
             <p className="text-sm text-muted-foreground">
-              Mobile chat support coming soon!
+              Please check back in a few minutes!
             </p>
           </div>
         </div>
