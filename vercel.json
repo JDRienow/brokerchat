@@ -1,9 +1,9 @@
 {
   "functions": {
-    "app/(chat)/api/process-document/route.ts": {
+    "app/(chat)/api/process-document/**": {
       "maxDuration": 60
     },
-    "app/(chat)/api/files/upload/route.ts": {
+    "app/(chat)/api/files/upload/**": {
       "maxDuration": 30
     }
   },

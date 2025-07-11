@@ -65,11 +65,32 @@ export async function POST(request: NextRequest) {
   try {
     console.log('Processing document request...');
 
+    // Log request details for debugging
+    const contentLength = request.headers.get('content-length');
+    console.log('Request content-length:', contentLength);
+
+    if (contentLength && Number.parseInt(contentLength) > 15 * 1024 * 1024) {
+      console.log('Request too large, content-length:', contentLength);
+      return Response.json(
+        { error: 'File too large. Maximum size is 15MB.' },
+        { status: 413 },
+      );
+    }
+
     // Create dummy test file before importing pdf-parse
     await createDummyTestFile();
 
+    console.log('Attempting to parse form data...');
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+
+    if (file) {
+      console.log('File details:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      });
+    }
     const existingDocumentId = formData.get('existingDocumentId') as
       | string
       | null;
