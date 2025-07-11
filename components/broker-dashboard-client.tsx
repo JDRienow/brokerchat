@@ -233,7 +233,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      const response = await fetch('/api/process-document', {
+      const response = await fetch('/api/simple-upload', {
         method: 'POST',
         body: formData,
       });
