@@ -160,6 +160,19 @@ export default function PublicLinkPage({
   }
 
   if (error) {
+    // Show a special message for deactivated links, no navigation options
+    if (error.toLowerCase().includes('deactivated')) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Card className="max-w-md mx-auto">
+            <CardHeader>
+              <CardTitle className="text-center">This Document Chat is Deactivated</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      );
+    }
+    // For all other errors, show the default error UI
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="max-w-md mx-auto">
