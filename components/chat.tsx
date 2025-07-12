@@ -20,6 +20,7 @@ import { useAutoResume } from '@/hooks/use-auto-resume';
 import { ChatSDKError } from '@/lib/errors';
 import type { Attachment, ChatMessage } from '@/lib/types';
 import { useDataStream } from './data-stream-provider';
+import { SuggestedActions } from './suggested-actions';
 
 export function Chat({
   id,
@@ -30,6 +31,8 @@ export function Chat({
   autoResume,
   isPublic = false,
   documentMetadata,
+  hideGreetingTitle = false,
+  hideHeader = false,
 }: {
   id: string;
   initialMessages: ChatMessage[];
@@ -44,6 +47,8 @@ export function Chat({
     url: string;
     created_at: string;
   };
+  hideGreetingTitle?: boolean;
+  hideHeader?: boolean;
 }) {
   const { visibilityType } = useChatVisibility({
     chatId: id,
@@ -144,26 +149,36 @@ export function Chat({
   return (
     <>
       <div className="flex flex-col min-w-0 h-dvh bg-background">
-        <ChatHeader
-          chatId={id}
-          selectedVisibilityType={initialVisibilityType}
-          isReadonly={isReadonly}
-          session={session}
-          isPublic={isPublic}
-          documentMetadata={documentMetadata}
-        />
+        {/* Sticky Chat Header */}
+        {!hideHeader && (
+          <div className="sticky top-0 z-20 bg-background border-b shadow-sm">
+            <ChatHeader
+              chatId={id}
+              selectedVisibilityType={initialVisibilityType}
+              isReadonly={isReadonly}
+              session={session}
+              isPublic={isPublic}
+              documentMetadata={documentMetadata}
+            />
+          </div>
+        )}
 
-        <Messages
-          chatId={id}
-          status={status}
-          votes={votes}
-          messages={messages}
-          setMessages={setMessages}
-          regenerate={regenerate}
-          isReadonly={isReadonly}
-          isArtifactVisible={isArtifactVisible}
-        />
+        {/* Scrollable Messages Area */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-2 md:px-0">
+          <Messages
+            chatId={id}
+            status={status}
+            votes={votes}
+            messages={messages}
+            setMessages={setMessages}
+            regenerate={regenerate}
+            isReadonly={isReadonly}
+            isArtifactVisible={isArtifactVisible}
+            hideGreetingTitle={hideGreetingTitle}
+          />
+        </div>
 
+        {/* Pinned Input at Bottom */}
         <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
           {!isReadonly && (
             <MultimodalInput

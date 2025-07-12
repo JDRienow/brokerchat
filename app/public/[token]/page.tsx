@@ -279,39 +279,20 @@ export default function PublicLinkPage({
 
     // Chat Interface - Full screen like main app
   return (
-    <div className="flex flex-col h-screen">
-      {/* Minimal Header */}
-      <header className="border-b bg-white p-4 flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-3">
-          {linkData.custom_branding?.logo_url ? (
-            <img
-              src={linkData.custom_branding.logo_url}
-              alt="Company Logo"
-              className="h-6 w-6 rounded"
-            />
-          ) : (
-            <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
-              <GlobeIcon size={14} />
-            </div>
-          )}
-          <div>
-            <h1 className="font-medium">{linkData.title}</h1>
-            <p className="text-xs text-muted-foreground">
-              {linkData.broker_company || linkData.broker_name}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-          <FileIcon size={14} />
-          <span className="text-xs">{linkData.document_title}</span>
-        </div>
-      </header>
-
-      {/* Full Height Chat - Account for header */}
-      <div className="flex-1 min-h-0">
-        <DataStreamProvider>
-          <SidebarProvider defaultOpen={false}>
-            <SidebarInset className="h-full">
+    <div className="flex flex-col h-screen bg-background">
+      {/* Sticky, clean header for document title */}
+      <div className="sticky top-0 z-20 w-full py-4 px-4 border-b bg-white shadow-sm flex flex-col items-center justify-center">
+        <h1 className="text-xl font-bold text-center">{linkData.document_title}</h1>
+        {linkData.broker_company || linkData.broker_name ? (
+          <p className="text-xs text-muted-foreground text-center mt-1">
+            {linkData.broker_company || linkData.broker_name}
+          </p>
+        ) : null}
+      </div>
+      <DataStreamProvider>
+        <SidebarProvider defaultOpen={false}>
+          <SidebarInset className="flex flex-col h-full">
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col pt-24">
               <Chat
                 id={linkData.document_id}
                 initialMessages={session?.chat_history ? session.chat_history.map(msg => ({
@@ -331,11 +312,13 @@ export default function PublicLinkPage({
                   url: linkData.document_url,
                   created_at: linkData.document_created_at,
                 }}
+                hideGreetingTitle
+                hideHeader
               />
-            </SidebarInset>
-          </SidebarProvider>
-        </DataStreamProvider>
-      </div>
+            </div>
+          </SidebarInset>
+        </SidebarProvider>
+      </DataStreamProvider>
     </div>
   );
 }

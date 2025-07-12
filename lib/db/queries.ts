@@ -928,6 +928,8 @@ export async function getBrokerUniqueEmailsPerDocument(brokerId: string) {
     .from('client_sessions')
     .select(`
       client_email,
+      client_name,
+      created_at,
       public_link:public_links!inner(
         document_id,
         broker_id,
@@ -938,20 +940,39 @@ export async function getBrokerUniqueEmailsPerDocument(brokerId: string) {
 
   if (error) throw error;
 
-  // Group by document and count unique emails
+  // Group by document and email, count accesses and get first access date
   const emailsPerDocument = new Map();
   data?.forEach((session: any) => {
     const documentId = session.public_link?.document_id;
     const documentTitle = session.public_link?.document_metadata?.[0]?.title;
-    if (documentId && session.client_email) {
+    const email = session.client_email;
+    const name = session.client_name;
+    const createdAt = session.created_at;
+    if (documentId && email) {
       if (!emailsPerDocument.has(documentId)) {
         emailsPerDocument.set(documentId, {
           document_id: documentId,
           document_title: documentTitle,
-          unique_emails: new Set(),
+          emails: new Map(),
         });
       }
-      emailsPerDocument.get(documentId).unique_emails.add(session.client_email);
+      const docEntry = emailsPerDocument.get(documentId);
+      if (!docEntry.emails.has(email)) {
+        docEntry.emails.set(email, {
+          email,
+          name,
+          first_accessed: createdAt,
+          access_count: 1,
+        });
+      } else {
+        const emailEntry = docEntry.emails.get(email);
+        emailEntry.access_count += 1;
+        // Update first_accessed if this session is earlier
+        if (createdAt < emailEntry.first_accessed) {
+          emailEntry.first_accessed = createdAt;
+        }
+        docEntry.emails.set(email, emailEntry);
+      }
     }
   });
 
@@ -959,7 +980,8 @@ export async function getBrokerUniqueEmailsPerDocument(brokerId: string) {
   return Array.from(emailsPerDocument.values()).map((doc) => ({
     document_id: doc.document_id,
     document_title: doc.document_title,
-    unique_email_count: doc.unique_emails.size,
+    emails: Array.from(doc.emails.values()),
+    total_unique_emails: doc.emails.size,
   }));
 }
 
