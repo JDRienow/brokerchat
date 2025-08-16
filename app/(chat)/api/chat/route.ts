@@ -18,6 +18,8 @@ import { entitlementsByUserType } from '@/lib/ai/entitlements';
 const OPENAI_EMBEDDING_MODEL =
   process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   // Apply rate limiting
   const rateLimitResult = await chatRateLimiter(request);

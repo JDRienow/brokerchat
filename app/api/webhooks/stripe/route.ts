@@ -13,6 +13,8 @@ import { sendPasswordResetEmail } from '@/lib/email';
 import { createPasswordResetToken } from '@/lib/db/queries';
 import { nanoid } from 'nanoid';
 
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = request.headers.get('stripe-signature');

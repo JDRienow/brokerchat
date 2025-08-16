@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { auth } from '@/app/(auth)/auth';
 import { uploadRateLimiter } from '@/lib/rate-limit-redis';
 
+export const runtime = 'nodejs';
+
 // Use Blob instead of File since File is not available in Node.js environment
 const FileSchema = z.object({
   file: z

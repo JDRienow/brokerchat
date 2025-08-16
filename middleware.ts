@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { isDevelopmentEnvironment } from './lib/constants';
 import { createClient } from '@supabase/supabase-js';
-import { authRateLimiter } from './lib/rate-limit-redis';
+// Note: Avoid importing Node-only modules in middleware (Edge runtime)
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -53,31 +53,7 @@ export async function middleware(request: NextRequest) {
     return new Response('pong', { status: 200 });
   }
 
-  // Apply rate limiting to authentication endpoints
-  if (
-    pathname.startsWith('/api/auth/signin') ||
-    pathname.startsWith('/api/auth/callback')
-  ) {
-    const rateLimitResult = await authRateLimiter(request);
-    if (!rateLimitResult.success) {
-      return new Response(
-        JSON.stringify({
-          error: 'Too many authentication attempts',
-          retryAfter: rateLimitResult.retryAfter,
-        }),
-        {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'Retry-After': rateLimitResult.retryAfter?.toString() || '900',
-            'X-RateLimit-Limit': '5',
-            'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': rateLimitResult.resetTime?.toString() || '',
-          },
-        },
-      );
-    }
-  }
+  // Auth rate limiting removed in middleware to ensure Edge compatibility.
 
   // Always allow API routes to pass through
   if (pathname.startsWith('/api/auth') || pathname.startsWith('/api/')) {

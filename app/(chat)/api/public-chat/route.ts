@@ -9,6 +9,8 @@ import {
 } from '@/lib/db/queries';
 import { chatRateLimiter } from '@/lib/rate-limit-redis';
 
+export const runtime = 'nodejs';
+
 // POST: Handle client chat messages for public links
 export async function POST(request: NextRequest) {
   // Apply rate limiting
