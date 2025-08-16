@@ -80,9 +80,14 @@ export function MessageEditor({
           onClick={async () => {
             setIsSubmitting(true);
 
-            await deleteTrailingMessages({
-              id: message.id,
-            });
+            try {
+              await deleteTrailingMessages({
+                id: message.id,
+              });
+            } catch (error) {
+              console.error('Error deleting trailing messages:', error);
+              // Continue with the edit even if deletion fails
+            }
 
             setMessages((messages) => {
               const index = messages.findIndex((m) => m.id === message.id);

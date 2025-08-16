@@ -17,6 +17,11 @@ declare module 'next-auth' {
       last_name?: string;
       company_name?: string;
       subscription_tier?: string;
+      subscription_status?: string;
+      trial_ends_at?: string | null;
+      logo_url?: string;
+      team_id?: string | null;
+      is_team_admin?: boolean;
     } & DefaultSession['user'];
   }
 
@@ -28,6 +33,11 @@ declare module 'next-auth' {
     last_name?: string;
     company_name?: string;
     subscription_tier?: string;
+    subscription_status?: string;
+    trial_ends_at?: string | null;
+    logo_url?: string;
+    team_id?: string | null;
+    is_team_admin?: boolean;
   }
 }
 
@@ -39,6 +49,11 @@ declare module 'next-auth/jwt' {
     last_name?: string;
     company_name?: string;
     subscription_tier?: string;
+    subscription_status?: string;
+    trial_ends_at?: string | null;
+    logo_url?: string;
+    team_id?: string | null;
+    is_team_admin?: boolean;
   }
 }
 
@@ -53,36 +68,52 @@ export const {
     Credentials({
       credentials: {},
       async authorize({ email, password }: any) {
-        const broker = await getBrokerByEmail(email);
+        try {
+          const broker = await getBrokerByEmail(email);
 
-        if (!broker) {
-          await compare(password, DUMMY_PASSWORD);
+          if (!broker) {
+            await compare(password, DUMMY_PASSWORD);
+            return null;
+          }
+
+          if (!broker.password_hash) {
+            await compare(password, DUMMY_PASSWORD);
+            return null;
+          }
+
+          // Allow users with pending subscriptions to sign in
+          // They'll see a banner to complete payment
+          if (broker.subscription_status === 'pending') {
+            // Still allow login, but they'll see pending banner
+          }
+
+          const passwordsMatch = await compare(password, broker.password_hash);
+
+          if (!passwordsMatch) return null;
+
+          return {
+            id: broker.id,
+            email: broker.email,
+            first_name: broker.first_name,
+            last_name: broker.last_name,
+            company_name: broker.company_name,
+            subscription_tier: broker.subscription_tier,
+            subscription_status: broker.subscription_status,
+            trial_ends_at: broker.trial_ends_at,
+            logo_url: broker.logo_url,
+            type: 'broker',
+            team_id: broker.team_id, // add team_id
+            is_team_admin: broker.is_team_admin, // add is_team_admin
+          };
+        } catch (error) {
+          console.error('Auth error:', error);
           return null;
         }
-
-        if (!broker.password_hash) {
-          await compare(password, DUMMY_PASSWORD);
-          return null;
-        }
-
-        const passwordsMatch = await compare(password, broker.password_hash);
-
-        if (!passwordsMatch) return null;
-
-        return {
-          id: broker.id,
-          email: broker.email,
-          first_name: broker.first_name,
-          last_name: broker.last_name,
-          company_name: broker.company_name,
-          subscription_tier: broker.subscription_tier,
-          type: 'broker',
-        };
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id as string;
         token.type = user.type;
@@ -90,6 +121,25 @@ export const {
         token.last_name = user.last_name;
         token.company_name = user.company_name;
         token.subscription_tier = user.subscription_tier;
+        token.subscription_status = user.subscription_status;
+        token.trial_ends_at = user.trial_ends_at;
+        token.logo_url = user.logo_url;
+        token.team_id = user.team_id; // add team_id
+        token.is_team_admin = user.is_team_admin; // add is_team_admin
+      }
+
+      // Refresh user data on token refresh
+      if (trigger === 'update' && token.email) {
+        try {
+          const broker = await getBrokerByEmail(token.email as string);
+          if (broker) {
+            token.subscription_tier = broker.subscription_tier;
+            token.subscription_status = broker.subscription_status;
+            token.trial_ends_at = broker.trial_ends_at;
+          }
+        } catch (error) {
+          console.error('Error refreshing user data:', error);
+        }
       }
 
       return token;
@@ -102,6 +152,11 @@ export const {
         session.user.last_name = token.last_name;
         session.user.company_name = token.company_name;
         session.user.subscription_tier = token.subscription_tier;
+        session.user.subscription_status = token.subscription_status;
+        session.user.trial_ends_at = token.trial_ends_at;
+        session.user.logo_url = token.logo_url;
+        session.user.team_id = token.team_id; // add team_id
+        session.user.is_team_admin = token.is_team_admin; // add is_team_admin
       }
 
       return session;

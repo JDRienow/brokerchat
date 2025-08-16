@@ -20,7 +20,8 @@ import { useAutoResume } from '@/hooks/use-auto-resume';
 import { ChatSDKError } from '@/lib/errors';
 import type { Attachment, ChatMessage } from '@/lib/types';
 import { useDataStream } from './data-stream-provider';
-import { SuggestedActions } from './suggested-actions';
+import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
+import { motion } from 'framer-motion';
 
 export function Chat({
   id,
@@ -33,6 +34,7 @@ export function Chat({
   documentMetadata,
   hideGreetingTitle = false,
   hideHeader = false,
+  headerOffsetPx = 0,
 }: {
   id: string;
   initialMessages: ChatMessage[];
@@ -49,6 +51,7 @@ export function Chat({
   };
   hideGreetingTitle?: boolean;
   hideHeader?: boolean;
+  headerOffsetPx?: number; // extra top offset when parent renders its own fixed header
 }) {
   const { visibilityType } = useChatVisibility({
     chatId: id,
@@ -71,10 +74,11 @@ export function Chat({
   } = useChat<ChatMessage>({
     id,
     messages: initialMessages,
-    experimental_throttle: 100,
+    experimental_throttle: 50, // Reduced from 100ms to 50ms for faster response
     generateId: generateUUID,
+
     transport: new DefaultChatTransport({
-      api: '/api/chat',
+      api: isPublic ? '/api/public-chat' : '/api/chat',
       fetch: fetchWithErrorHandlers,
       prepareSendMessagesRequest({ messages, id, body }) {
         const sessionToken =
@@ -86,6 +90,29 @@ export function Chat({
           );
         }
 
+        // For public chat, send a simplified format
+        if (isPublic) {
+          const lastMessage = messages.at(-1);
+          let messageText = '';
+
+          // Extract text from message parts
+          if (lastMessage?.parts && lastMessage.parts.length > 0) {
+            const firstPart = lastMessage.parts[0];
+            if (firstPart.type === 'text') {
+              messageText = firstPart.text || '';
+            }
+          }
+
+          return {
+            body: {
+              session_token: sessionToken,
+              message: messageText,
+              chat_id: id,
+            },
+          };
+        }
+
+        // For regular chat, use the original format
         return {
           body: {
             id,
@@ -127,9 +154,11 @@ export function Chat({
       });
 
       setHasAppendedQuery(true);
-      window.history.replaceState({}, '', `/chat/${id}`);
+      if (!isPublic) {
+        window.history.replaceState({}, '', `/chat/${id}`);
+      }
     }
-  }, [query, sendMessage, hasAppendedQuery, id]);
+  }, [query, sendMessage, hasAppendedQuery, id, isPublic]);
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 && !isPublic ? `/api/vote?chatId=${id}` : null,
@@ -138,6 +167,15 @@ export function Chat({
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
+
+  // Get scroll functions for the outer container
+  const {
+    containerRef: scrollContainerRef,
+    scrollToBottomManual,
+    isAtBottom,
+    onViewportEnter,
+    onViewportLeave,
+  } = useScrollToBottom();
 
   useAutoResume({
     autoResume,
@@ -148,10 +186,10 @@ export function Chat({
 
   return (
     <>
-      <div className="flex flex-col min-w-0 h-dvh bg-background">
-        {/* Sticky Chat Header */}
+      <div className="flex flex-col min-w-0 h-screen bg-background relative">
+        {/* Fixed Chat Header */}
         {!hideHeader && (
-          <div className="sticky top-0 z-20 bg-background border-b shadow-sm">
+          <div className="fixed top-0 left-0 right-0 z-50 bg-background border-b shadow-sm">
             <ChatHeader
               chatId={id}
               selectedVisibilityType={initialVisibilityType}
@@ -163,8 +201,23 @@ export function Chat({
           </div>
         )}
 
-        {/* Scrollable Messages Area */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-2 md:px-0">
+        {/* Scrollable Messages Area - positioned between fixed header and input */}
+        <div
+          ref={scrollContainerRef}
+          className="overflow-y-auto px-2 md:px-0"
+          style={{
+            position: 'absolute',
+            top: !hideHeader ? '64px' : `${headerOffsetPx}px`,
+            bottom: '120px',
+            left: '0',
+            right: '0',
+            zIndex: 10,
+            height: !hideHeader
+              ? 'calc(100vh - 184px)'
+              : `calc(100vh - ${120 + headerOffsetPx}px)`,
+            paddingTop: !hideHeader || headerOffsetPx > 0 ? '16px' : '0px',
+          }}
+        >
           <Messages
             chatId={id}
             status={status}
@@ -176,25 +229,37 @@ export function Chat({
             isArtifactVisible={isArtifactVisible}
             hideGreetingTitle={hideGreetingTitle}
           />
+
+          {/* Viewport detection element for the outer container */}
+          <motion.div
+            className="shrink-0 min-w-[24px] min-h-[60px]"
+            onViewportLeave={onViewportLeave}
+            onViewportEnter={onViewportEnter}
+          />
         </div>
 
-        {/* Pinned Input at Bottom */}
-        <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
-          {!isReadonly && (
-            <MultimodalInput
-              chatId={id}
-              input={input}
-              setInput={setInput}
-              status={status}
-              stop={stop}
-              attachments={attachments}
-              setAttachments={setAttachments}
-              messages={messages}
-              setMessages={setMessages}
-              sendMessage={sendMessage}
-              selectedVisibilityType={visibilityType}
-            />
-          )}
+        {/* Fixed Input at Bottom */}
+        <form className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-sm px-4 py-4">
+          <div className="flex mx-auto gap-2 w-full md:max-w-3xl">
+            {!isReadonly && (
+              <MultimodalInput
+                chatId={id}
+                input={input}
+                setInput={setInput}
+                status={status}
+                stop={stop}
+                attachments={attachments}
+                setAttachments={setAttachments}
+                messages={messages}
+                setMessages={setMessages}
+                sendMessage={sendMessage}
+                selectedVisibilityType={visibilityType}
+                scrollToBottomManual={scrollToBottomManual}
+                isAtBottom={isAtBottom}
+                isPublic={isPublic}
+              />
+            )}
+          </div>
         </form>
       </div>
 

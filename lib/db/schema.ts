@@ -9,6 +9,7 @@ import {
   primaryKey,
   foreignKey,
   boolean,
+  integer,
 } from 'drizzle-orm/pg-core';
 
 export const user = pgTable('User', {
@@ -26,13 +27,19 @@ export const broker = pgTable('brokers', {
   first_name: varchar('first_name', { length: 255 }).notNull(),
   last_name: varchar('last_name', { length: 255 }).notNull(),
   company_name: varchar('company_name', { length: 255 }),
+  logo_url: text('logo_url'),
   phone: varchar('phone', { length: 50 }),
+  // Stripe subscription fields
+  stripe_customer_id: varchar('stripe_customer_id', { length: 255 }),
+  stripe_subscription_id: varchar('stripe_subscription_id', { length: 255 }),
   subscription_tier: varchar('subscription_tier', { length: 50 }).default(
-    'basic',
+    'individual',
   ),
   subscription_status: varchar('subscription_status', { length: 50 }).default(
-    'active',
+    'trial',
   ),
+  trial_ends_at: timestamp('trial_ends_at'),
+  document_count: integer('document_count').default(0),
   reset_token: varchar('reset_token', { length: 255 }),
   reset_token_expires: timestamp('reset_token_expires'),
   created_at: timestamp('created_at').notNull().defaultNow(),
@@ -190,3 +197,35 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+// Subscription events table for tracking Stripe webhook events
+export const subscriptionEvent = pgTable('subscription_events', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  broker_id: uuid('broker_id')
+    .notNull()
+    .references(() => broker.id),
+  stripe_event_id: varchar('stripe_event_id', { length: 255 }).notNull(),
+  event_type: varchar('event_type', { length: 100 }).notNull(),
+  event_data: json('event_data').notNull(),
+  processed: boolean('processed').default(false),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export type SubscriptionEvent = InferSelectModel<typeof subscriptionEvent>;
+
+// Error logs table for storing application errors
+export const errorLog = pgTable('error_logs', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  user_id: uuid('user_id').references(() => broker.id),
+  user_email: text('user_email'),
+  error_message: text('error_message').notNull(),
+  error_stack: text('error_stack'),
+  component_stack: text('component_stack'),
+  url: text('url'),
+  user_agent: text('user_agent'),
+  environment: varchar('environment', { length: 50 }).default('production'),
+  timestamp: timestamp('timestamp').notNull().defaultNow(),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export type ErrorLog = InferSelectModel<typeof errorLog>;

@@ -76,6 +76,21 @@ export default async function Page({
     });
   }
 
+  // Create serializable session data
+  const sessionData = {
+    user: {
+      id: session.user.id,
+      email: session.user.email,
+      type: session.user.type,
+      first_name: session.user.first_name,
+      last_name: session.user.last_name,
+      company_name: session.user.company_name,
+      subscription_tier: session.user.subscription_tier,
+      logo_url: session.user.logo_url,
+    },
+    expires: session.expires,
+  };
+
   // Document chats get a completely standalone layout without any sidebar
   return (
     <>
@@ -94,7 +109,7 @@ export default async function Page({
                   initialMessages={initialMessages}
                   initialVisibilityType="private"
                   isReadonly={false}
-                  session={session}
+                  session={sessionData as any}
                   autoResume={false}
                   documentMetadata={{
                     id: document.id,

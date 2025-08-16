@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { useSearchParams } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -32,6 +34,10 @@ import {
 import { toast } from '@/components/toast';
 import { ProfilePopover } from '@/components/profile-popover';
 import { uploadFileToStorage } from '@/lib/supabase-storage';
+import { ConversationModal } from '@/components/conversation-modal';
+import { PendingSubscriptionBanner } from '@/components/pending-subscription-banner';
+import { getDaysRemainingInTrial, formatTrialDaysRemaining } from '@/lib/utils';
+import { TrialCountdown } from '@/components/trial-countdown';
 import type { Session } from 'next-auth';
 
 interface Document {
@@ -91,10 +97,43 @@ interface ProcessingResult {
 }
 
 interface BrokerDashboardClientProps {
-  session: Session;
+  session: {
+    user: {
+      id: string;
+      email: string | null | undefined;
+      type: 'broker';
+      first_name: string | undefined;
+      last_name: string | undefined;
+      company_name: string | undefined;
+      subscription_tier: string | undefined;
+      subscription_status?: string;
+      trial_ends_at?: string | null;
+      logo_url: string | undefined;
+      team_id?: string; // Added for team view indicator
+    };
+    expires: string;
+  };
+}
+
+function getMaxDocumentsForTier(tier: string | undefined): number {
+  switch (tier) {
+    case 'team':
+      return 200;
+    case 'individual':
+      return 25;
+    case 'free_trial':
+      return 5;
+    case 'broker': // fallback for legacy
+    case 'trial': // fallback for legacy
+    default:
+      return 5;
+  }
 }
 
 export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
+  const searchParams = useSearchParams();
+  const checkoutPlan = searchParams.get('checkout_plan');
+
   const [documents, setDocuments] = useState<Document[]>([]);
   const [publicLinks, setPublicLinks] = useState<PublicLink[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
@@ -102,6 +141,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
     null,
   );
   const [loading, setLoading] = useState(true);
+  const [freshUserData, setFreshUserData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<
     'documents' | 'links' | 'analytics' | 'upload'
   >('documents');
@@ -111,11 +151,159 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
   const [result, setResult] = useState<ProcessingResult | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  // Conversation modal states
+  const [conversationModal, setConversationModal] = useState<{
+    isOpen: boolean;
+    email: string;
+    documentId: string;
+    documentTitle: string;
+  }>({
+    isOpen: false,
+    email: '',
+    documentId: '',
+    documentTitle: '',
+  });
+
+  // Checkout states
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+
+  // Use fresh data from database if available, otherwise fall back to session
+  const subscriptionTier =
+    freshUserData?.subscription_tier || session.user.subscription_tier;
+  const subscriptionStatus =
+    freshUserData?.subscription_status || session.user.subscription_status;
+  const trialEndsAt =
+    freshUserData?.trial_ends_at || session.user.trial_ends_at;
+  const maxDocuments = getMaxDocumentsForTier(subscriptionTier);
+
+  // Calculate trial countdown for free trial users
+  const isFreeTrial = subscriptionTier === 'free_trial';
+  const trialDaysRemaining = isFreeTrial
+    ? getDaysRemainingInTrial(trialEndsAt)
+    : 0;
+  const trialCountdownText = isFreeTrial
+    ? formatTrialDaysRemaining(trialDaysRemaining)
+    : '';
+
   useEffect(() => {
     fetchDashboardData();
     // Track dashboard view analytics
     trackDashboardView();
-  }, []);
+
+    // Fetch fresh user data from database
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch('/api/profile');
+        if (response.ok) {
+          const userData = await response.json();
+          setFreshUserData(userData.user);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+      }
+    };
+
+    fetchUserData();
+
+    // Show success message if plan was updated
+    if (searchParams.get('plan_updated') === 'true') {
+      toast({
+        type: 'success',
+        description: 'Your plan has been updated successfully!',
+      });
+    }
+  }, [searchParams]);
+
+  // Separate useEffect for debug logging to avoid infinite loops
+  useEffect(() => {
+    if (freshUserData) {
+      console.log('Dashboard data comparison:', {
+        session: {
+          subscription_tier: session?.user?.subscription_tier,
+          subscription_status: session?.user?.subscription_status,
+          trial_ends_at: session?.user?.trial_ends_at,
+        },
+        fresh: {
+          subscription_tier: freshUserData?.subscription_tier,
+          subscription_status: freshUserData?.subscription_status,
+          trial_ends_at: freshUserData?.trial_ends_at,
+        },
+        calculated: {
+          subscriptionTier,
+          subscriptionStatus,
+          trialEndsAt,
+          isFreeTrial,
+          trialDaysRemaining,
+          trialCountdownText,
+        },
+      });
+    }
+  }, [
+    freshUserData,
+    session?.user?.subscription_tier,
+    session?.user?.subscription_status,
+    session?.user?.trial_ends_at,
+    subscriptionTier,
+    subscriptionStatus,
+    trialEndsAt,
+    isFreeTrial,
+    trialDaysRemaining,
+    trialCountdownText,
+  ]);
+
+  // Handle checkout if user was redirected here for purchase
+  useEffect(() => {
+    if (checkoutPlan && !isCheckoutLoading) {
+      handleCheckout(checkoutPlan);
+    }
+  }, [checkoutPlan, isCheckoutLoading]);
+
+  const handleCheckout = async (planName: string) => {
+    if (!['individual', 'team'].includes(planName)) {
+      return;
+    }
+
+    try {
+      setIsCheckoutLoading(true);
+
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          plan: planName,
+        }),
+      });
+
+      const { sessionId, error } = await response.json();
+
+      if (error) {
+        console.error('Checkout error:', error);
+        toast({
+          type: 'error',
+          description: 'Failed to create checkout session. Please try again.',
+        });
+        return;
+      }
+
+      // Redirect to Stripe Checkout
+      const stripe = await import('@stripe/stripe-js').then((mod) =>
+        mod.loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''),
+      );
+      if (stripe) {
+        await stripe.redirectToCheckout({ sessionId });
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      toast({
+        type: 'error',
+        description: 'Failed to create checkout session. Please try again.',
+      });
+    } finally {
+      setIsCheckoutLoading(false);
+    }
+  };
 
   const trackDashboardView = async () => {
     try {
@@ -150,18 +338,14 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
       }
 
       // Fetch public links
-      const linksResponse = await fetch(
-        `/api/public-links?broker_id=${session.user.id}`,
-      );
+      const linksResponse = await fetch(`/api/public-links`);
       if (linksResponse.ok) {
         const linksData = await linksResponse.json();
         setPublicLinks(linksData.links || []);
       }
 
       // Fetch analytics with correct broker_id parameter
-      const analyticsResponse = await fetch(
-        `/api/analytics?broker_id=${session.user.id}`,
-      );
+      const analyticsResponse = await fetch(`/api/analytics`);
       if (analyticsResponse.ok) {
         const analyticsData = await analyticsResponse.json();
         setAnalytics(analyticsData.summary);
@@ -178,9 +362,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
       }
 
       // Fetch email analytics
-      const emailAnalyticsResponse = await fetch(
-        `/api/broker/email-analytics?broker_id=${session.user.id}`,
-      );
+      const emailAnalyticsResponse = await fetch(`/api/broker/email-analytics`);
       if (emailAnalyticsResponse.ok) {
         const emailData = await emailAnalyticsResponse.json();
         setEmailAnalytics(emailData);
@@ -265,6 +447,11 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
         } else if (response.status === 504) {
           throw new Error(
             'Processing timeout. Please try again with a smaller file.',
+          );
+        } else if (response.status === 403) {
+          const data = await response.json();
+          throw new Error(
+            data.error || 'You have reached your document limit.',
           );
         } else {
           throw new Error(
@@ -570,13 +757,57 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      {/* Pending Subscription Banner */}
+      {subscriptionStatus === 'pending' && (
+        <PendingSubscriptionBanner
+          plan={subscriptionTier || 'individual'}
+          onCompletePayment={() =>
+            handleCheckout(subscriptionTier || 'individual')
+          }
+        />
+      )}
+
+      {/* Trial Countdown Banner */}
+      {(() => {
+        console.log('Trial countdown banner condition check:', {
+          isFreeTrial,
+          trialCountdownText,
+          trialEndsAt,
+          shouldShow: isFreeTrial && trialCountdownText,
+        });
+        return isFreeTrial && trialCountdownText ? (
+          <div className="mb-6">
+            <TrialCountdown
+              trialEndsAt={trialEndsAt}
+              variant="banner"
+              showUpgradeButton={true}
+              onUpgradeClick={() => window.open('/pricing', '_blank')}
+            />
+          </div>
+        ) : null;
+      })()}
+
       {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome back, {session?.user.first_name} {session?.user.last_name}
-          </p>
+        <div className="flex items-center gap-4">
+          <Image
+            src="/images/om2chat (400 x 100 px).svg"
+            alt="OM2Chat"
+            width={400}
+            height={100}
+            className="h-10 w-auto"
+          />
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-muted-foreground">
+              Welcome back, {session?.user.first_name} {session?.user.last_name}
+              {session?.user.team_id && (
+                <span className="ml-2 text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                  Team View
+                </span>
+              )}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Button
@@ -615,7 +846,9 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Total Views</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Chat Sessions
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{analytics.totalViews}</div>
@@ -635,7 +868,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Documents ({documents.length})
+          Documents
         </button>
         <button
           type="button"
@@ -646,7 +879,7 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Public Links ({publicLinks.length})
+          Public Links
         </button>
         <button
           type="button"
@@ -698,33 +931,67 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <UploadIcon size={20} />
-                Upload New Document
+                Upload Document
               </CardTitle>
               <CardDescription>
-                Select a PDF file to process and add to your document collection
+                Upload a PDF document to create a public chat link
               </CardDescription>
+              <div className="text-xs text-muted-foreground mt-2">
+                Usage: {documents.length} of {maxDocuments} allowed
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="pdf-file">Select PDF File</Label>
+                <Label htmlFor="file">Select PDF Document</Label>
                 <Input
-                  id="pdf-file"
+                  id="file"
                   type="file"
                   accept=".pdf"
                   onChange={handleFileSelect}
-                  className="cursor-pointer"
+                  disabled={isProcessing}
                 />
+                <p className="text-sm text-muted-foreground">
+                  Maximum file size: 50MB
+                </p>
               </div>
 
               {selectedFile && (
-                <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                   <FileIcon size={16} />
                   <span className="text-sm font-medium">
                     {selectedFile.name}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
                   </span>
+                </div>
+              )}
+
+              {result && (
+                <div
+                  className={`p-4 rounded-lg ${
+                    result.success
+                      ? 'bg-green-50 border border-green-200 text-green-800'
+                      : 'bg-red-50 border border-red-200 text-red-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {result.success ? (
+                      <CheckCircleFillIcon size={16} />
+                    ) : (
+                      <CrossIcon size={16} />
+                    )}
+                    <span className="font-medium">{result.message}</span>
+                  </div>
+                  {result.error && (
+                    <p className="mt-2 text-sm">{result.error}</p>
+                  )}
+                  {result.success && result.chunks && (
+                    <p className="mt-2 text-sm">
+                      Document processed successfully! {result.chunks} chunks
+                      created.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -741,86 +1008,11 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
                     <span className="ml-2">Processing...</span>
                   </>
                 ) : (
-                  <>
-                    <UploadIcon size={16} />
-                    <span className="ml-2">Process Document</span>
-                  </>
+                  'Upload & Process Document'
                 )}
               </Button>
             </CardContent>
           </Card>
-
-          {/* Processing Result */}
-          {result && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {result.success ? (
-                    <CheckCircleFillIcon size={20} />
-                  ) : (
-                    <CrossIcon size={20} />
-                  )}
-                  Processing Result
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div
-                  className={`p-4 rounded-md ${
-                    result.success
-                      ? 'bg-green-50 border border-green-200 text-green-800'
-                      : 'bg-red-50 border border-red-200 text-red-800'
-                  }`}
-                >
-                  <p className="font-medium">{result.message}</p>
-                  {result.success && result.documentId && (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-sm">
-                        <strong>Document ID:</strong> {result.documentId}
-                      </p>
-                      {result.title && (
-                        <p className="text-sm">
-                          <strong>Title:</strong> {result.title}
-                        </p>
-                      )}
-                      {result.chunks && (
-                        <p className="text-sm">
-                          <strong>Chunks Created:</strong> {result.chunks}
-                        </p>
-                      )}
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          onClick={() => {
-                            const chatUrl = `/document/${result.documentId}`;
-                            window.open(chatUrl, '_blank');
-                          }}
-                          size="sm"
-                          variant="outline"
-                        >
-                          Chat with Document
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            if (result.documentId && result.title) {
-                              createPublicLink(result.documentId, result.title);
-                            }
-                          }}
-                          size="sm"
-                          variant="default"
-                        >
-                          Create Public Link
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  {result.error && (
-                    <p className="text-sm mt-2">
-                      <strong>Error:</strong> {result.error}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       )}
 
@@ -860,18 +1052,12 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
                         const existingLink = getPublicLinkForDocument(doc.id);
                         return (
                           <>
-                            {existingLink && (
-                              <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-2 rounded">
-                                <ShareIcon size={16} />
-                                <span>Public link created</span>
-                              </div>
-                            )}
                             <div className="flex gap-2 justify-between">
                               <div className="flex gap-2">
                                 {existingLink ? (
                                   <Button
-                                    variant="outline"
                                     size="sm"
+                                    className="border-black text-black hover:bg-black hover:text-white bg-black text-white"
                                     onClick={() =>
                                       window.open(
                                         `/public/${existingLink.token}`,
@@ -902,8 +1088,9 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
                                 </Button>
                               </div>
                               <Button
-                                variant="destructive"
+                                variant="outline"
                                 size="sm"
+                                className="border-red-500 text-red-500 hover:bg-red-50"
                                 onClick={() =>
                                   deleteDocument(doc.id, doc.title)
                                 }
@@ -1023,7 +1210,8 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
                         <Button
                           onClick={() => deletePublicLink(link.id, link.title)}
                           size="sm"
-                          variant="destructive"
+                          variant="outline"
+                          className="border-red-500 text-red-500 hover:bg-red-50"
                         >
                           <CrossIcon size={16} />
                           <span className="ml-2">Delete</span>
@@ -1055,6 +1243,9 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
                   <p className="text-muted-foreground text-sm">
                     Documents uploaded and processed
                   </p>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    Usage: {documents.length} of {maxDocuments} allowed
+                  </div>
                 </CardContent>
               </Card>
 
@@ -1153,10 +1344,24 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
                                     emailData.first_accessed,
                                   ).toLocaleDateString()}
                                 </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {emailData.access_count} access
-                                  {emailData.access_count !== 1 ? 'es' : ''}
-                                </div>
+                                <Button
+                                  onClick={() =>
+                                    setConversationModal({
+                                      isOpen: true,
+                                      email: emailData.email,
+                                      documentId: doc.document_id,
+                                      documentTitle: doc.document_title,
+                                    })
+                                  }
+                                  size="sm"
+                                  variant="outline"
+                                  className="mt-2"
+                                >
+                                  <MessageIcon size={14} />
+                                  <span className="ml-1">
+                                    View Conversation
+                                  </span>
+                                </Button>
                               </div>
                             </div>
                           ))}
@@ -1174,6 +1379,22 @@ export function BrokerDashboardClient({ session }: BrokerDashboardClientProps) {
           )}
         </div>
       )}
+
+      {/* Conversation Modal */}
+      <ConversationModal
+        isOpen={conversationModal.isOpen}
+        onClose={() =>
+          setConversationModal({
+            isOpen: false,
+            email: '',
+            documentId: '',
+            documentTitle: '',
+          })
+        }
+        email={conversationModal.email}
+        documentId={conversationModal.documentId}
+        documentTitle={conversationModal.documentTitle}
+      />
     </div>
   );
 }

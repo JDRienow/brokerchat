@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { auth } from '@/app/(auth)/auth';
+import { uploadRateLimiter } from '@/lib/rate-limit-redis';
 
 // Use Blob instead of File since File is not available in Node.js environment
 const FileSchema = z.object({
@@ -18,6 +19,26 @@ const FileSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // Apply rate limiting
+  const rateLimitResult = await uploadRateLimiter(request as any);
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      {
+        error: 'Too many upload requests',
+        retryAfter: rateLimitResult.retryAfter,
+      },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': rateLimitResult.retryAfter?.toString() || '60',
+          'X-RateLimit-Limit': '10',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': rateLimitResult.resetTime?.toString() || '',
+        },
+      },
+    );
+  }
+
   const session = await auth();
 
   if (!session) {

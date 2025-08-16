@@ -17,8 +17,26 @@ export function useScrollToBottom() {
     useSWR<ScrollFlag>('messages:should-scroll', null, { fallbackData: false });
 
   useEffect(() => {
-    if (scrollBehavior) {
-      endRef.current?.scrollIntoView({ behavior: scrollBehavior });
+    if (scrollBehavior && containerRef.current) {
+      // Scroll to show the user's message with proper spacing
+      const container = containerRef.current;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+
+      // Calculate scroll position to show the last message with adequate spacing
+      // Use 1/3 of the container height + 60px as spacing to ensure good positioning
+      const spacing = Math.max(180, clientHeight / 3 + 60);
+      const targetScrollTop = scrollHeight - clientHeight - spacing;
+
+      if (scrollBehavior === 'smooth') {
+        container.scrollTo({
+          top: targetScrollTop,
+          behavior: 'smooth',
+        });
+      } else {
+        container.scrollTop = targetScrollTop;
+      }
+
       setScrollBehavior(false);
     }
   }, [setScrollBehavior, scrollBehavior]);
@@ -28,6 +46,29 @@ export function useScrollToBottom() {
       setScrollBehavior(scrollBehavior);
     },
     [setScrollBehavior],
+  );
+
+  const scrollToBottomManual = useCallback(
+    (scrollBehavior: ScrollBehavior = 'smooth') => {
+      if (containerRef.current) {
+        const container = containerRef.current;
+        const scrollHeight = container.scrollHeight;
+        const clientHeight = container.clientHeight;
+
+        // Scroll to the actual bottom for manual button clicks
+        const targetScrollTop = scrollHeight - clientHeight;
+
+        if (scrollBehavior === 'smooth') {
+          container.scrollTo({
+            top: targetScrollTop,
+            behavior: 'smooth',
+          });
+        } else {
+          container.scrollTop = targetScrollTop;
+        }
+      }
+    },
+    [],
   );
 
   function onViewportEnter() {
@@ -43,6 +84,7 @@ export function useScrollToBottom() {
     endRef,
     isAtBottom,
     scrollToBottom,
+    scrollToBottomManual,
     onViewportEnter,
     onViewportLeave,
   };

@@ -114,3 +114,22 @@ export function getTextFromMessage(message: ChatMessage): string {
     .map((part) => part.text)
     .join('');
 }
+
+export function getDaysRemainingInTrial(
+  trialEndsAt: string | Date | null,
+): number {
+  if (!trialEndsAt) return 0;
+
+  const trialEnd = new Date(trialEndsAt);
+  const now = new Date();
+  const diffTime = trialEnd.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  return Math.max(0, diffDays);
+}
+
+export function formatTrialDaysRemaining(days: number): string {
+  if (days === 0) return 'Trial ends today';
+  if (days === 1) return '1 day remaining';
+  return `${days} days remaining`;
+}

@@ -1,21 +1,40 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/db/queries';
+import { auth } from '@/app/(auth)/auth';
+import { supabaseAdmin } from '@/lib/db/queries';
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const brokerId = searchParams.get('broker_id');
+    const session = await auth();
 
-    if (!brokerId) {
-      return NextResponse.json(
-        { error: 'Missing broker_id parameter' },
-        { status: 400 },
-      );
+    if (!session || !session.user || session.user.type !== 'broker') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    let brokerIds: string[];
+
+    // If user is on a team, get all team member IDs
+    if (session.user.team_id) {
+      const { data: teamMembers } = await supabaseAdmin
+        .from('brokers')
+        .select('id')
+        .eq('team_id', session.user.team_id);
+      brokerIds = teamMembers?.map((b) => b.id) || [];
+    } else {
+      // Otherwise, use only the current user's ID
+      brokerIds = [session.user.id];
+    }
+
+    if (brokerIds.length === 0) {
+      return NextResponse.json({
+        documents: [],
+        total_documents: 0,
+        total_unique_emails: 0,
+      });
     }
 
     // Fetch client sessions with document and email information
-    const { data: sessions, error } = await supabase
+    const { data: sessions, error } = await supabaseAdmin
       .from('client_sessions')
       .select(`
         client_email,
@@ -29,7 +48,7 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .eq('public_link.broker_id', brokerId)
+      .in('public_link.broker_id', brokerIds)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -96,10 +115,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       documents: result,
       total_documents: result.length,
-      total_unique_emails: new Set(sessions?.map((s) => s.client_email)).size,
+      total_unique_emails: new Set(sessions?.map((s: any) => s.client_email))
+        .size,
     });
   } catch (error) {
-    console.error('Email analytics API error:', error);
+    console.error('Error fetching email analytics:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 },

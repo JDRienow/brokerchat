@@ -8,9 +8,15 @@ import './globals.css';
 import { SessionProvider } from 'next-auth/react';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://chat.vercel.ai'),
-  title: 'Next.js Chatbot Template',
-  description: 'Next.js chatbot template using the AI SDK.',
+  metadataBase: new URL('https://om2chat.com'),
+  title: 'OM2Chat - Commercial Real Estate AI Assistant',
+  description:
+    'AI-powered chatbot for commercial real estate professionals. Upload documents, get instant answers, and share insights with clients.',
+  icons: {
+    icon: '/images/om2chat-favicon (64 x 64 px).svg',
+    shortcut: '/images/om2chat-favicon (64 x 64 px).svg',
+    apple: '/images/om2chat-favicon (64 x 64 px).svg',
+  },
 };
 
 export const viewport = {

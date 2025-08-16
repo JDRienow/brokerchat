@@ -1,3 +1,5 @@
+'use client';
+
 import type { Chat } from '@/lib/db/schema';
 import {
   SidebarMenuAction,

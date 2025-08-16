@@ -47,7 +47,11 @@ function PureMessages({
   return (
     <div
       ref={messagesContainerRef}
-      className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4 relative"
+      className="flex flex-col min-w-0 gap-6 flex-1 relative"
+      style={{
+        height: '100%',
+        paddingTop: messages.length === 0 ? '8px' : '24px',
+      }}
     >
       {messages.length === 0 && <Greeting hideTitle={hideGreetingTitle} />}
 
@@ -77,7 +81,7 @@ function PureMessages({
 
       <motion.div
         ref={messagesEndRef}
-        className="shrink-0 min-w-[24px] min-h-[24px]"
+        className="shrink-0 min-w-[24px] min-h-[60px]"
         onViewportLeave={onViewportLeave}
         onViewportEnter={onViewportEnter}
       />

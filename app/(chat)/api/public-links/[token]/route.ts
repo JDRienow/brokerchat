@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { auth } from '@/app/(auth)/auth';
 import {
   getPublicLinkByToken,
   createClientSession,
@@ -50,6 +51,9 @@ export async function GET(
       broker_company: publicLinkRaw.broker?.company_name || '',
       requires_email: publicLinkRaw.requires_email,
       custom_branding: publicLinkRaw.custom_branding,
+      broker: {
+        logo_url: publicLinkRaw.broker?.logo_url || null,
+      },
     };
 
     // Track analytics event
@@ -61,6 +65,18 @@ export async function GET(
 
     // If email is provided, create/update client session
     if (email) {
+      // SECURITY CHECK: Prevent brokers from creating client sessions with their own email
+      const session = await auth();
+      if (session?.user?.type === 'broker' && session.user.email === email) {
+        return NextResponse.json(
+          {
+            error:
+              'Brokers cannot create client sessions with their own email address',
+          },
+          { status: 403 },
+        );
+      }
+
       try {
         const clientSession = await createClientSession({
           public_link_id: publicLink.id,
@@ -130,6 +146,21 @@ export async function POST(
 
     if (!client_email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
+
+    // SECURITY CHECK: Prevent brokers from creating client sessions with their own email
+    const session = await auth();
+    if (
+      session?.user?.type === 'broker' &&
+      session.user.email === client_email
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Brokers cannot create client sessions with their own email address',
+        },
+        { status: 403 },
+      );
     }
 
     // Get the public link

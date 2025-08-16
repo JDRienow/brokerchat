@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useActionState, useEffect, useState } from 'react';
 import { toast } from '@/components/toast';
+import Image from 'next/image';
 
 import { SubmitButton } from '@/components/submit-button';
 
@@ -54,6 +55,13 @@ export default function ForgotPasswordPage() {
       <div className="flex h-dvh w-screen items-start pt-12 md:pt-0 md:items-center justify-center bg-background">
         <div className="w-full max-w-md overflow-hidden rounded-2xl flex flex-col gap-12">
           <div className="flex flex-col items-center justify-center gap-4 px-4 text-center sm:px-16">
+            <Image
+              src="/images/om2chat (400 x 100 px).svg"
+              alt="OM2Chat"
+              width={400}
+              height={100}
+              className="h-12 w-auto"
+            />
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
               <svg
                 className="w-8 h-8 text-green-600"
@@ -103,7 +111,14 @@ export default function ForgotPasswordPage() {
   return (
     <div className="flex h-dvh w-screen items-start pt-12 md:pt-0 md:items-center justify-center bg-background">
       <div className="w-full max-w-md overflow-hidden rounded-2xl flex flex-col gap-12">
-        <div className="flex flex-col items-center justify-center gap-2 px-4 text-center sm:px-16">
+        <div className="flex flex-col items-center justify-center gap-4 px-4 text-center sm:px-16">
+          <Image
+            src="/images/om2chat (400 x 100 px).svg"
+            alt="OM2Chat"
+            width={400}
+            height={100}
+            className="h-12 w-auto"
+          />
           <h3 className="text-xl font-semibold dark:text-zinc-50">
             Forgot Password?
           </h3>

@@ -7,9 +7,30 @@ import {
   vectorSimilaritySearch,
   trackAnalyticsEvent,
 } from '@/lib/db/queries';
+import { chatRateLimiter } from '@/lib/rate-limit-redis';
 
 // POST: Handle client chat messages for public links
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResult = await chatRateLimiter(request);
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      {
+        error: 'Too many requests',
+        retryAfter: rateLimitResult.retryAfter,
+      },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': rateLimitResult.retryAfter?.toString() || '60',
+          'X-RateLimit-Limit': '30',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': rateLimitResult.resetTime?.toString() || '',
+        },
+      },
+    );
+  }
+
   try {
     const { session_token, message, chat_id } = await request.json();
 
@@ -40,22 +61,22 @@ export async function POST(request: NextRequest) {
 
     const documentId = public_link.document_metadata.id;
 
-    // Insert user message
-    await insertChatMessageWithSession(
+    // Insert user message (non-blocking)
+    insertChatMessageWithSession(
       documentId,
       'user',
       message,
       clientSession.id,
-    );
+    ).catch(console.error);
 
-    // Track analytics event
-    await trackAnalyticsEvent({
+    // Track analytics event (non-blocking)
+    trackAnalyticsEvent({
       broker_id: public_link.broker_id,
       public_link_id: public_link.id,
       client_session_id: clientSession.id,
       event_type: 'chat_message',
       event_data: { message_type: 'user', message_length: message.length },
-    });
+    }).catch(console.error);
 
     // Generate embedding for the user message
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -142,16 +163,16 @@ ${context}`,
     const completionData = await completion.json();
     const aiResponse = completionData.choices[0].message.content;
 
-    // Insert AI response
-    await insertChatMessageWithSession(
+    // Insert AI response (non-blocking)
+    insertChatMessageWithSession(
       documentId,
       'assistant',
       aiResponse,
       clientSession.id,
-    );
+    ).catch(console.error);
 
-    // Track AI response analytics
-    await trackAnalyticsEvent({
+    // Track AI response analytics (non-blocking)
+    trackAnalyticsEvent({
       broker_id: public_link.broker_id,
       public_link_id: public_link.id,
       client_session_id: clientSession.id,
@@ -161,18 +182,62 @@ ${context}`,
         message_length: aiResponse.length,
         chunks_used: relevantChunks.length,
       },
-    });
+    }).catch(console.error);
 
-    // Update client session activity
-    await updateClientSessionActivity(
+    // Update client session activity (non-blocking)
+    updateClientSessionActivity(
       clientSession.id,
       clientSession.total_messages + 2, // +2 for user and assistant messages
-    );
+    ).catch(console.error);
 
-    return NextResponse.json({
-      success: true,
-      response: aiResponse,
-      chunks_used: relevantChunks.length,
+    // Return streaming response to match Chat component expectations
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const messageId = `msg_${Date.now()}`;
+
+        try {
+          // Send start events
+          controller.enqueue(encoder.encode('data: {"type":"start-step"}\n\n'));
+          controller.enqueue(
+            encoder.encode(
+              `data: {"type":"text-start","id":"${messageId}"}\n\n`,
+            ),
+          );
+
+          // Send the AI response in chunks to simulate streaming
+          const chunks = aiResponse.match(/.{1,50}/g) || [aiResponse];
+          for (const chunk of chunks) {
+            controller.enqueue(
+              encoder.encode(
+                `data: {"type":"text-delta","id":"${messageId}","delta":"${chunk}"}\n\n`,
+              ),
+            );
+            // Reduced delay for faster response
+            await new Promise((resolve) => setTimeout(resolve, 5));
+          }
+
+          // Send end events
+          controller.enqueue(
+            encoder.encode(`data: {"type":"text-end","id":"${messageId}"}\n\n`),
+          );
+          controller.enqueue(encoder.encode('data: {"type":"end-step"}\n\n'));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        } catch (error) {
+          console.error('Streaming error:', error);
+          controller.error(error);
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
     });
   } catch (error) {
     console.error('Error in public chat:', error);

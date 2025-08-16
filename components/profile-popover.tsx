@@ -41,8 +41,11 @@ export function ProfilePopover({
     setIsOpen(false);
     try {
       await signOut({
-        redirectTo: '/login',
+        callbackUrl: '/',
+        redirect: false,
       });
+      // Force redirect to landing page
+      window.location.href = '/';
     } catch (error) {
       toast({
         type: 'error',

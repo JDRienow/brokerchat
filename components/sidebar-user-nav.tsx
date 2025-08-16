@@ -89,6 +89,22 @@ export function SidebarUserNav({ user }: { user: User }) {
                 Profile Settings
               </button>
             </DropdownMenuItem>
+            {data?.user?.subscription_tier === 'team' && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild data-testid="user-nav-item-team">
+                  <button
+                    type="button"
+                    className="w-full cursor-pointer"
+                    onClick={() => {
+                      router.push('/profile?tab=team');
+                    }}
+                  >
+                    Invite Team Members
+                  </button>
+                </DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild data-testid="user-nav-item-auth">
               <button
@@ -106,8 +122,11 @@ export function SidebarUserNav({ user }: { user: User }) {
                   }
 
                   signOut({
-                    redirectTo: '/',
+                    callbackUrl: '/',
+                    redirect: false,
                   });
+                  // Force redirect to landing page
+                  window.location.href = '/';
                 }}
               >
                 Sign out

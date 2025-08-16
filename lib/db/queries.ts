@@ -2,15 +2,21 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL');
 if (!supabaseAnonKey) throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// Server-side Supabase client with service role for bypassing RLS
+export const supabaseAdmin = supabaseServiceKey
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : supabase;
+
 // Fetch all chat history for a given document_id
 export async function fetchChatHistory(documentId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('chat_histories')
     .select('*')
     .eq('document_id', documentId)
@@ -25,7 +31,7 @@ export async function insertChatMessage(
   role: string,
   content: string,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('chat_histories')
     .insert([
       {
@@ -46,7 +52,7 @@ export async function vectorSimilaritySearch(
   k = 5,
 ) {
   // First try the RPC function for vector search
-  const { data, error } = await supabase.rpc('match_documents', {
+  const { data, error } = await supabaseAdmin.rpc('match_documents', {
     query_embedding: embedding,
     match_count: k,
     file_id: documentId,
@@ -54,7 +60,7 @@ export async function vectorSimilaritySearch(
 
   if (error) {
     // Fallback: check if any documents exist for this file_id
-    const { data: fallbackData, error: fallbackError } = await supabase
+    const { data: fallbackData, error: fallbackError } = await supabaseAdmin
       .from('documents')
       .select('*')
       .eq('file_id', documentId)
@@ -73,13 +79,52 @@ export async function vectorSimilaritySearch(
 
 // Fetch document metadata by id
 export async function fetchDocumentMetadata(documentId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('document_metadata')
     .select('*')
     .eq('id', documentId)
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+// Get document by ID (for AI tools compatibility)
+export async function getDocumentById({ id }: { id: string }) {
+  const document = await fetchDocumentMetadata(id);
+  if (!document) return null;
+
+  return {
+    id: document.id,
+    title: document.title,
+    kind: 'text' as const, // Default to text since document_metadata doesn't have kind
+    content: '', // Document content is not stored in metadata
+    userId: document.broker_id || '', // Use broker_id as userId
+    createdAt: document.created_at,
+  };
+}
+
+// Save document (for AI tools compatibility)
+export async function saveDocument({
+  id,
+  title,
+  content,
+  kind,
+  userId,
+}: {
+  id: string;
+  title: string;
+  content: string;
+  kind: string;
+  userId: string;
+}) {
+  // For now, just update the document metadata since we don't store content
+  const { error } = await supabase
+    .from('document_metadata')
+    .update({ title })
+    .eq('id', id);
+
+  if (error) throw error;
+  return { id, title, content, kind };
 }
 
 // Insert document metadata
@@ -108,7 +153,7 @@ export async function insertDocumentChunk(
   chunkIndex: number,
   metadata?: any,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('documents')
     .insert({
       file_id: fileId,
@@ -247,6 +292,17 @@ export async function getBrokerByEmail(email: string) {
   return data;
 }
 
+// Check if an email has already used a trial
+export async function hasUsedTrial(email: string) {
+  const { data, error } = await supabase
+    .from('brokers')
+    .select('has_used_trial')
+    .eq('email', email)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.has_used_trial || false;
+}
+
 // Get broker by ID
 export async function getBrokerById(id: string) {
   const { data, error } = await supabase
@@ -267,10 +323,20 @@ export async function createBroker(brokerData: {
   company_name?: string;
   phone?: string;
   subscription_tier?: string;
+  subscription_status?: string;
+  trial_ends_at?: Date;
+  has_used_trial?: boolean;
 }) {
   const { data, error } = await supabase
     .from('brokers')
-    .insert([brokerData])
+    .insert([
+      {
+        ...brokerData,
+        subscription_tier: brokerData.subscription_tier || 'free_trial',
+        subscription_status: brokerData.subscription_status || 'active',
+        has_used_trial: brokerData.has_used_trial || false,
+      },
+    ])
     .select()
     .single();
   if (error) throw error;
@@ -287,6 +353,7 @@ export async function updateBroker(
     phone: string;
     subscription_tier: string;
     subscription_status: string;
+    logo_url: string;
   }>,
 ) {
   const { data, error } = await supabase
@@ -363,7 +430,7 @@ export async function clearPasswordResetToken(id: string) {
 
 // Get broker's documents
 export async function getBrokerDocuments(brokerId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('document_metadata')
     .select('*')
     .eq('broker_id', brokerId)
@@ -374,7 +441,7 @@ export async function getBrokerDocuments(brokerId: string) {
   // For each document, get chunk count separately
   const documentsWithChunks = await Promise.all(
     (data || []).map(async (doc) => {
-      const { data: chunks, error: chunkError } = await supabase
+      const { data: chunks, error: chunkError } = await supabaseAdmin
         .from('documents')
         .select('id')
         .eq('file_id', doc.id);
@@ -424,7 +491,7 @@ export async function createPublicLink(linkData: {
 
   const public_token = `doc_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('public_links')
     .insert([{ ...linkData, public_token }])
     .select()
@@ -435,12 +502,12 @@ export async function createPublicLink(linkData: {
 
 // Get public link by token
 export async function getPublicLinkByToken(token: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('public_links')
     .select(`
       *,
       document_metadata:document_metadata(*),
-      broker:brokers(first_name, last_name, company_name)
+      broker:brokers(first_name, last_name, company_name, logo_url)
     `)
     .eq('public_token', token)
     .eq('is_active', true)
@@ -451,7 +518,7 @@ export async function getPublicLinkByToken(token: string) {
 
 // Get broker's public links
 export async function getBrokerPublicLinks(brokerId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('public_links')
     .select(`
       *,
@@ -475,7 +542,7 @@ export async function updatePublicLink(
     custom_branding: any;
   }>,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('public_links')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
@@ -487,7 +554,10 @@ export async function updatePublicLink(
 
 // Delete public link
 export async function deletePublicLink(id: string) {
-  const { error } = await supabase.from('public_links').delete().eq('id', id);
+  const { error } = await supabaseAdmin
+    .from('public_links')
+    .delete()
+    .eq('id', id);
   if (error) throw error;
 }
 
@@ -495,7 +565,7 @@ export async function deletePublicLink(id: string) {
 export async function deleteDocumentAndRelatedData(documentId: string) {
   try {
     // First, get all public link IDs for this document
-    const { data: publicLinkIds, error: linkError } = await supabase
+    const { data: publicLinkIds, error: linkError } = await supabaseAdmin
       .from('public_links')
       .select('id')
       .eq('document_id', documentId);
@@ -509,7 +579,7 @@ export async function deleteDocumentAndRelatedData(documentId: string) {
       const linkIds = publicLinkIds.map((link) => link.id);
 
       // Delete analytics events for these public links
-      const { error: analyticsError } = await supabase
+      const { error: analyticsError } = await supabaseAdmin
         .from('analytics')
         .delete()
         .in('public_link_id', linkIds);
@@ -520,7 +590,7 @@ export async function deleteDocumentAndRelatedData(documentId: string) {
       }
 
       // Delete client sessions for these public links
-      const { error: sessionsError } = await supabase
+      const { error: sessionsError } = await supabaseAdmin
         .from('client_sessions')
         .delete()
         .in('public_link_id', linkIds);
@@ -532,7 +602,7 @@ export async function deleteDocumentAndRelatedData(documentId: string) {
 
       // Delete chat histories for these public links
       const { data: chatHistories, error: chatHistoryFetchError } =
-        await supabase
+        await supabaseAdmin
           .from('chat_histories')
           .select('id')
           .eq('document_id', documentId);
@@ -540,7 +610,7 @@ export async function deleteDocumentAndRelatedData(documentId: string) {
       if (chatHistoryFetchError) {
         console.error('Error fetching chat histories:', chatHistoryFetchError);
       } else if (chatHistories && chatHistories.length > 0) {
-        const { error: chatHistoryError } = await supabase
+        const { error: chatHistoryError } = await supabaseAdmin
           .from('chat_histories')
           .delete()
           .eq('document_id', documentId);
@@ -551,7 +621,7 @@ export async function deleteDocumentAndRelatedData(documentId: string) {
       }
 
       // Delete public links
-      const { error: publicLinksError } = await supabase
+      const { error: publicLinksError } = await supabaseAdmin
         .from('public_links')
         .delete()
         .eq('document_id', documentId);
@@ -563,7 +633,7 @@ export async function deleteDocumentAndRelatedData(documentId: string) {
     }
 
     // Delete document chunks
-    const { error: chunksError } = await supabase
+    const { error: chunksError } = await supabaseAdmin
       .from('documents')
       .delete()
       .eq('file_id', documentId);
@@ -574,7 +644,7 @@ export async function deleteDocumentAndRelatedData(documentId: string) {
     }
 
     // Delete document metadata
-    const { error: metadataError } = await supabase
+    const { error: metadataError } = await supabaseAdmin
       .from('document_metadata')
       .delete()
       .eq('id', documentId);
@@ -664,7 +734,7 @@ export async function createClientSession(sessionData: {
 
 // Get client session by token
 export async function getClientSessionByToken(token: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('client_sessions')
     .select(`
       *,
@@ -690,7 +760,7 @@ export async function updateClientSessionActivity(
     (updates as any).total_messages = messageCount;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('client_sessions')
     .update(updates)
     .eq('id', sessionId)
@@ -702,7 +772,7 @@ export async function updateClientSessionActivity(
 
 // Get public link's client sessions
 export async function getPublicLinkClientSessions(publicLinkId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('client_sessions')
     .select('*')
     .eq('public_link_id', publicLinkId)
@@ -713,7 +783,7 @@ export async function getPublicLinkClientSessions(publicLinkId: string) {
 
 // Get chat history for client session
 export async function getClientSessionChatHistory(clientSessionId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('chat_histories')
     .select('*')
     .eq('client_session_id', clientSessionId)
@@ -749,7 +819,7 @@ export async function trackAnalyticsEvent(eventData: {
     | 'error_occurred';
   event_data?: any;
 }) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('analytics')
     .insert([eventData])
     .select()
@@ -912,7 +982,7 @@ export async function getBrokerAnalytics(brokerId: string, days = 30) {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('analytics')
     .select('*')
     .eq('broker_id', brokerId)
@@ -924,7 +994,7 @@ export async function getBrokerAnalytics(brokerId: string, days = 30) {
 
 // Get unique email captures per document for broker
 export async function getBrokerUniqueEmailsPerDocument(brokerId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('client_sessions')
     .select(`
       client_email,
@@ -990,7 +1060,7 @@ export async function getPublicLinkAnalytics(publicLinkId: string, days = 30) {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('analytics')
     .select('*')
     .eq('public_link_id', publicLinkId)
@@ -1219,7 +1289,7 @@ export async function insertDocumentMetadataWithBroker(
     insertData.storage_url = storageUrl;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('document_metadata')
     .insert([insertData])
     .select()
@@ -1245,11 +1315,658 @@ export async function insertChatMessageWithSession(
     insertData.client_session_id = clientSessionId;
   }
 
-  const { data, error } = await supabase
+  console.log(
+    'Inserting chat message with data:',
+    JSON.stringify(insertData, null, 2),
+  );
+
+  const { data, error } = await supabaseAdmin
     .from('chat_histories')
     .insert([insertData])
     .select()
     .single();
   if (error) throw error;
   return data;
+}
+
+// ==================== BROKER CLIENT CONVERSATION FUNCTIONS ====================
+
+// Get all client sessions for a broker with conversation data
+export async function getBrokerClientSessions(
+  brokerId: string,
+  options?: {
+    limit?: number;
+    offset?: number;
+    documentId?: string;
+    searchEmail?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  },
+) {
+  let query = supabaseAdmin
+    .from('client_sessions')
+    .select(`
+      *,
+      public_link:public_links(
+        id,
+        title,
+        document_id,
+        document_metadata:document_metadata(title, created_at)
+      ),
+      chat_histories:chat_histories(
+        id,
+        role,
+        content,
+        created_at
+      )
+    `)
+    .eq('public_link.broker_id', brokerId);
+
+  // Apply filters
+  if (options?.documentId) {
+    query = query.eq('public_link.document_id', options.documentId);
+  }
+  if (options?.searchEmail) {
+    query = query.ilike('client_email', `%${options.searchEmail}%`);
+  }
+  if (options?.dateFrom) {
+    query = query.gte('first_visit', options.dateFrom);
+  }
+  if (options?.dateTo) {
+    query = query.lte('first_visit', options.dateTo);
+  }
+
+  // Apply pagination
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+  if (options?.offset) {
+    query = query.range(
+      options.offset,
+      options.offset + (options.limit || 50) - 1,
+    );
+  }
+
+  query = query.order('last_activity', { ascending: false });
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+// Get detailed conversation for a specific client session
+export async function getClientSessionConversation(sessionId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('client_sessions')
+    .select(`
+      *,
+      public_link:public_links(
+        id,
+        title,
+        document_id,
+        document_metadata:document_metadata(title, created_at)
+      ),
+      chat_histories:chat_histories(
+        id,
+        role,
+        content,
+        created_at
+      )
+    `)
+    .eq('id', sessionId)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// Get all client activity for a specific document
+export async function getDocumentClientActivity(
+  documentId: string,
+  brokerId: string,
+) {
+  const { data, error } = await supabase
+    .from('client_sessions')
+    .select(`
+      *,
+      public_link:public_links!inner(
+        id,
+        title,
+        document_id
+      ),
+      chat_histories:chat_histories(
+        id,
+        role,
+        content,
+        created_at
+      )
+    `)
+    .eq('public_link.document_id', documentId)
+    .eq('public_link.broker_id', brokerId)
+    .order('last_activity', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+// Get conversation analytics for a broker
+export async function updateBrokerSubscription(updates: {
+  brokerId: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionStatus?: string;
+  trialEndsAt?: Date | null;
+  currentPlan?: string;
+  documentCount?: number;
+}) {
+  const { data, error } = await supabaseAdmin
+    .from('brokers')
+    .update({
+      stripe_customer_id: updates.stripeCustomerId,
+      stripe_subscription_id: updates.stripeSubscriptionId,
+      subscription_status: updates.subscriptionStatus,
+      trial_ends_at: updates.trialEndsAt,
+      subscription_tier: updates.currentPlan,
+      document_count: updates.documentCount,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', updates.brokerId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// Check if user's trial has expired
+export async function checkTrialStatus(brokerId: string) {
+  const { data, error } = await supabase
+    .from('brokers')
+    .select('subscription_status, trial_ends_at, subscription_tier')
+    .eq('id', brokerId)
+    .single();
+
+  if (error) throw error;
+
+  if (!data) return { isValid: false, reason: 'User not found' };
+
+  // If user has a paid subscription, they're always valid
+  if (data.subscription_status === 'active' && !data.trial_ends_at) {
+    return { isValid: true, reason: 'Paid subscription' };
+  }
+
+  // Check if trial has expired
+  if (data.trial_ends_at && new Date() > new Date(data.trial_ends_at)) {
+    return { isValid: false, reason: 'Trial expired' };
+  }
+
+  return { isValid: true, reason: 'Trial active' };
+}
+
+export async function getBrokerConversationAnalytics(
+  brokerId: string,
+  days = 30,
+) {
+  const dateFrom = new Date();
+  dateFrom.setDate(dateFrom.getDate() - days);
+
+  const { data, error } = await supabase
+    .from('client_sessions')
+    .select(`
+      id,
+      client_email,
+      first_visit,
+      last_activity,
+      total_messages,
+      public_link:public_links(
+        id,
+        title,
+        document_id,
+        document_metadata:document_metadata(title)
+      ),
+      chat_histories:chat_histories(count)
+    `)
+    .eq('public_link.broker_id', brokerId)
+    .gte('first_visit', dateFrom.toISOString())
+    .order('last_activity', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+// Team functionality queries
+export async function createTeam(adminBrokerId: string, teamName: string) {
+  const { data, error } = await supabaseAdmin
+    .from('teams')
+    .insert([
+      {
+        admin_broker_id: adminBrokerId,
+        name: teamName,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  // Update the admin broker to be part of the team
+  await supabaseAdmin
+    .from('brokers')
+    .update({
+      team_id: data.id,
+      is_team_admin: true,
+    })
+    .eq('id', adminBrokerId);
+
+  return data;
+}
+
+export async function getTeamByAdminId(adminBrokerId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('teams')
+    .select('*')
+    .eq('admin_broker_id', adminBrokerId)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getTeamMembers(teamId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('brokers')
+    .select(
+      'id, email, first_name, last_name, company_name, is_team_admin, created_at',
+    )
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function createTeamInvitation(
+  adminBrokerId: string,
+  invitedEmail: string,
+) {
+  // Check if admin has active team subscription
+  const admin = await getBrokerById(adminBrokerId);
+  if (
+    !admin ||
+    admin.subscription_tier !== 'team' ||
+    admin.subscription_status !== 'active'
+  ) {
+    throw new Error(
+      'Admin must have an active team subscription to invite members',
+    );
+  }
+
+  // Get or create team
+  let team: any;
+  try {
+    team = await getTeamByAdminId(adminBrokerId);
+  } catch (error: any) {
+    // If no team exists, create one
+    if (error.code === 'PGRST116') {
+      const admin = await getBrokerById(adminBrokerId);
+      const teamName =
+        admin?.company_name || `${admin?.first_name || 'Team'}'s Team`;
+      team = await createTeam(adminBrokerId, teamName);
+    } else {
+      throw error;
+    }
+  }
+
+  // Check if team already has 4 members (excluding admin)
+  if (team) {
+    const members = await getTeamMembers(team.id);
+    if (members.length >= 5) {
+      // Admin + 4 members
+      throw new Error('Team is at maximum capacity (5 members total)');
+    }
+  }
+
+  // Check if invitation already exists
+  const existingInvitation = await getTeamInvitationByEmail(
+    adminBrokerId,
+    invitedEmail,
+  );
+  if (existingInvitation && existingInvitation.status === 'pending') {
+    throw new Error('Invitation already sent to this email');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('team_invitations')
+    .insert([
+      {
+        admin_broker_id: adminBrokerId,
+        invited_email: invitedEmail,
+        token: crypto.randomUUID(),
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getTeamInvitationByEmail(
+  adminBrokerId: string,
+  invitedEmail: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from('team_invitations')
+    .select('*')
+    .eq('admin_broker_id', adminBrokerId)
+    .eq('invited_email', invitedEmail)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getTeamInvitationByToken(token: string) {
+  const { data, error } = await supabaseAdmin
+    .from('team_invitations')
+    .select(`
+      *,
+      teams:team_id(*)
+    `)
+    .eq('token', token)
+    .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString())
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function acceptTeamInvitation(
+  token: string,
+  passwordHash: string,
+) {
+  const invitation = await getTeamInvitationByToken(token);
+  if (!invitation) {
+    throw new Error('Invalid or expired invitation');
+  }
+
+  // Create the team if it doesn't exist
+  let team = await getTeamByAdminId(invitation.admin_broker_id);
+  if (!team) {
+    const admin = await getBrokerById(invitation.admin_broker_id);
+    team = await createTeam(
+      invitation.admin_broker_id,
+      `${admin?.company_name || admin?.first_name}'s Team`,
+    );
+  }
+
+  // Create the new team member account
+  const { data: newMember, error: createError } = await supabaseAdmin
+    .from('brokers')
+    .insert([
+      {
+        email: invitation.invited_email,
+        password_hash: passwordHash,
+        first_name: '',
+        last_name: '',
+        company_name: '',
+        team_id: team.id,
+        is_team_admin: false,
+        invited_by: invitation.admin_broker_id,
+        subscription_tier: 'team',
+        subscription_status: 'active',
+      },
+    ])
+    .select()
+    .single();
+
+  if (createError) throw createError;
+
+  // Update invitation status
+  await supabaseAdmin
+    .from('team_invitations')
+    .update({
+      status: 'accepted',
+      accepted_at: new Date().toISOString(),
+    })
+    .eq('id', invitation.id);
+
+  return newMember;
+}
+
+export async function removeTeamMember(
+  adminBrokerId: string,
+  memberId: string,
+) {
+  // Verify admin permissions
+  const admin = await getBrokerById(adminBrokerId);
+  if (!admin || !admin.is_team_admin) {
+    throw new Error('Only team admins can remove team members');
+  }
+
+  const { error } = await supabaseAdmin
+    .from('brokers')
+    .update({
+      team_id: null,
+      is_team_admin: false,
+      invited_by: null,
+    })
+    .eq('id', memberId)
+    .eq('team_id', admin.team_id);
+
+  if (error) throw error;
+}
+
+export async function getPendingInvitations(adminBrokerId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('team_invitations')
+    .select('*')
+    .eq('admin_broker_id', adminBrokerId)
+    .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function cancelTeamInvitation(
+  invitationId: string,
+  adminBrokerId: string,
+) {
+  const { error } = await supabaseAdmin
+    .from('team_invitations')
+    .delete()
+    .eq('id', invitationId)
+    .eq('admin_broker_id', adminBrokerId);
+
+  if (error) throw error;
+}
+
+export async function checkTeamAccess(brokerId: string) {
+  const broker = await getBrokerById(brokerId);
+  if (!broker) return false;
+
+  // If user is not part of a team, they have access
+  if (!broker.team_id) return true;
+
+  // If user is part of a team, check if admin has active subscription
+  const { data: team, error: teamError } = await supabaseAdmin
+    .from('teams')
+    .select('admin_broker_id')
+    .eq('id', broker.team_id)
+    .single();
+
+  if (teamError || !team?.admin_broker_id) return false;
+
+  const admin = await getBrokerById(team.admin_broker_id);
+  return (
+    admin?.subscription_tier === 'team' &&
+    admin?.subscription_status === 'active'
+  );
+}
+
+// Get team's documents (all documents from team members)
+export async function getTeamDocuments(teamId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('document_metadata')
+    .select('*')
+    .in(
+      'broker_id',
+      (
+        await supabaseAdmin.from('brokers').select('id').eq('team_id', teamId)
+      ).data?.map((b) => b.id) || [],
+    )
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  // For each document, get chunk count separately
+  const documentsWithChunks = await Promise.all(
+    (data || []).map(async (doc) => {
+      const { data: chunks, error: chunkError } = await supabaseAdmin
+        .from('documents')
+        .select('id')
+        .eq('file_id', doc.id);
+
+      const chunkCount = chunkError ? 0 : chunks?.length || 0;
+
+      return {
+        ...doc,
+        chunk_count: chunkCount,
+      };
+    }),
+  );
+
+  return documentsWithChunks;
+}
+
+// Get team's public links (all public links from team members)
+export async function getTeamPublicLinks(teamId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('public_links')
+    .select(`
+      *,
+      document_metadata:document_metadata(title, created_at),
+      client_sessions:client_sessions(count)
+    `)
+    .in(
+      'broker_id',
+      (
+        await supabaseAdmin.from('brokers').select('id').eq('team_id', teamId)
+      ).data?.map((b) => b.id) || [],
+    )
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+// Get team's analytics (all analytics from team members)
+export async function getTeamAnalytics(teamId: string, days = 30) {
+  const teamBrokerIds =
+    (
+      await supabaseAdmin.from('brokers').select('id').eq('team_id', teamId)
+    ).data?.map((b) => b.id) || [];
+
+  if (teamBrokerIds.length === 0) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from('analytics')
+    .select('*')
+    .in('broker_id', teamBrokerIds)
+    .gte(
+      'created_at',
+      new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+    )
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// Get team's public links for analytics
+export async function getTeamPublicLinksForAnalytics(teamId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('public_links')
+    .select('*')
+    .in(
+      'broker_id',
+      (
+        await supabaseAdmin.from('brokers').select('id').eq('team_id', teamId)
+      ).data?.map((b) => b.id) || [],
+    )
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// Get team's client sessions (all client sessions from team members)
+export async function getTeamClientSessions(
+  teamId: string,
+  options?: {
+    limit?: number;
+    offset?: number;
+    documentId?: string;
+    searchEmail?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  },
+) {
+  const teamBrokerIds =
+    (
+      await supabaseAdmin.from('brokers').select('id').eq('team_id', teamId)
+    ).data?.map((b) => b.id) || [];
+
+  if (teamBrokerIds.length === 0) return [];
+
+  let query = supabaseAdmin
+    .from('client_sessions')
+    .select(`
+      *,
+      public_link:public_links!inner(
+        title,
+        document_metadata!inner(
+          title
+        )
+      )
+    `)
+    .in('public_link.broker_id', teamBrokerIds)
+    .order('created_at', { ascending: false });
+
+  // Apply filters
+  if (options?.documentId) {
+    query = query.eq('public_link.document_id', options.documentId);
+  }
+
+  if (options?.searchEmail) {
+    query = query.ilike('client_email', `%${options.searchEmail}%`);
+  }
+
+  if (options?.dateFrom) {
+    query = query.gte('created_at', options.dateFrom);
+  }
+
+  if (options?.dateTo) {
+    query = query.lte('created_at', options.dateTo);
+  }
+
+  // Apply pagination
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+
+  if (options?.offset) {
+    query = query.range(
+      options.offset,
+      options.offset + (options.limit || 50) - 1,
+    );
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return data || [];
 }

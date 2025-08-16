@@ -3,8 +3,10 @@ import {
   fetchDocumentMetadata,
   insertDocumentChunk,
   insertDocumentMetadataWithBroker,
+  getBrokerDocuments,
 } from '@/lib/db/queries';
 import type { NextRequest } from 'next/server';
+import { uploadRateLimiter } from '@/lib/rate-limit-redis';
 
 const OPENAI_EMBEDDING_MODEL =
   process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
@@ -38,6 +40,19 @@ function chunkText(text: string, maxChunkSize = 1000): string[] {
   return chunks;
 }
 
+function getMaxDocumentsForTier(tier: string | undefined): number {
+  switch (tier) {
+    case 'team':
+      return 200;
+    case 'individual':
+      return 25;
+    case 'broker': // fallback for legacy
+    case 'trial':
+    default:
+      return 5;
+  }
+}
+
 // Create a dummy test file to avoid pdf-parse initialization issue
 async function createDummyTestFile() {
   const fs = await import('node:fs');
@@ -62,9 +77,43 @@ async function createDummyTestFile() {
 }
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResult = await uploadRateLimiter(request);
+  if (!rateLimitResult.success) {
+    return Response.json(
+      {
+        error: 'Too many upload requests',
+        retryAfter: rateLimitResult.retryAfter,
+      },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': rateLimitResult.retryAfter?.toString() || '60',
+          'X-RateLimit-Limit': '10',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': rateLimitResult.resetTime?.toString() || '',
+        },
+      },
+    );
+  }
+
   const session = await auth();
   if (!session?.user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // ENFORCE DOCUMENT LIMITS
+  const brokerId = session.user.id;
+  const tier = session.user.subscription_tier;
+  const docs = await getBrokerDocuments(brokerId);
+  const maxDocs = getMaxDocumentsForTier(tier);
+  if (docs.length >= maxDocs) {
+    return Response.json(
+      {
+        error: `You have reached the maximum number of documents (${maxDocs}) for your plan.`,
+      },
+      { status: 403 },
+    );
   }
 
   try {

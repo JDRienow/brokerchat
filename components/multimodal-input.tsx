@@ -15,6 +15,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
+// import useSWR from 'swr';
 
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from './icons';
 import { PreviewAttachment } from './preview-attachment';
@@ -25,7 +26,7 @@ import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
-import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
+// import { useMessages } from '@/hooks/use-messages';
 import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@/lib/types';
 
@@ -42,6 +43,9 @@ function PureMultimodalInput({
   sendMessage,
   className,
   selectedVisibilityType,
+  scrollToBottomManual,
+  isAtBottom,
+  isPublic = false,
 }: {
   chatId: string;
   input: string;
@@ -55,6 +59,9 @@ function PureMultimodalInput({
   sendMessage: UseChatHelpers<ChatMessage>['sendMessage'];
   className?: string;
   selectedVisibilityType: VisibilityType;
+  scrollToBottomManual?: (scrollBehavior?: ScrollBehavior) => void;
+  isAtBottom?: boolean;
+  isPublic?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
@@ -116,7 +123,9 @@ function PureMultimodalInput({
       attachments: attachments.length,
     });
 
-    window.history.replaceState({}, '', `/chat/${chatId}`);
+    if (!isPublic) {
+      window.history.replaceState({}, '', `/chat/${chatId}`);
+    }
 
     sendMessage({
       role: 'user',
@@ -206,18 +215,33 @@ function PureMultimodalInput({
     [setAttachments],
   );
 
-  const { isAtBottom, scrollToBottom } = useScrollToBottom();
+  // Use props for scroll state and function
+  const finalIsAtBottom = isAtBottom ?? false;
+  const finalScrollToBottomManual = scrollToBottomManual;
 
-  useEffect(() => {
-    if (status === 'submitted') {
-      scrollToBottom();
-    }
-  }, [status, scrollToBottom]);
+  // Debounce scroll button clicks
+  const [isScrolling, setIsScrolling] = useState(false);
+
+  const handleScrollClick = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      if (isScrolling) return; // Prevent multiple rapid clicks
+
+      if (finalScrollToBottomManual) {
+        setIsScrolling(true);
+        finalScrollToBottomManual();
+
+        // Reset after a short delay
+        setTimeout(() => setIsScrolling(false), 500);
+      }
+    },
+    [finalScrollToBottomManual, isScrolling],
+  );
 
   return (
     <div className="relative w-full flex flex-col gap-4">
       <AnimatePresence>
-        {!isAtBottom && (
+        {!finalIsAtBottom && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -230,10 +254,7 @@ function PureMultimodalInput({
               className="rounded-full"
               size="icon"
               variant="outline"
-              onClick={(event) => {
-                event.preventDefault();
-                scrollToBottom();
-              }}
+              onClick={handleScrollClick}
             >
               <ArrowDown />
             </Button>
@@ -248,6 +269,7 @@ function PureMultimodalInput({
             sendMessage={sendMessage}
             chatId={chatId}
             selectedVisibilityType={selectedVisibilityType}
+            isPublic={isPublic}
           />
         )}
 
@@ -303,7 +325,7 @@ function PureMultimodalInput({
           ) {
             event.preventDefault();
 
-            if (status !== 'ready') {
+            if (status === 'submitted' || status === 'streaming') {
               toast.error('Please wait for the model to finish its response!');
             } else {
               submitForm();
@@ -324,6 +346,7 @@ function PureMultimodalInput({
             input={input}
             submitForm={submitForm}
             uploadQueue={uploadQueue}
+            status={status}
           />
         )}
       </div>
@@ -338,6 +361,9 @@ export const MultimodalInput = memo(
     if (prevProps.status !== nextProps.status) return false;
     if (!equal(prevProps.attachments, nextProps.attachments)) return false;
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
+      return false;
+    if (prevProps.isAtBottom !== nextProps.isAtBottom) return false;
+    if (prevProps.scrollToBottomManual !== nextProps.scrollToBottomManual)
       return false;
 
     return true;
@@ -397,12 +423,18 @@ function PureSendButton({
   submitForm,
   input,
   uploadQueue,
+  status,
 }: {
   submitForm: () => void;
   input: string;
   uploadQueue: Array<string>;
+  status: UseChatHelpers<ChatMessage>['status'];
 }) {
-  const isDisabled = input.length === 0 || uploadQueue.length > 0;
+  const isDisabled =
+    input.length === 0 ||
+    uploadQueue.length > 0 ||
+    status === 'submitted' ||
+    status === 'streaming';
 
   console.log('SendButton render', {
     inputLength: input.length,

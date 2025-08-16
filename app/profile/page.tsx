@@ -1,13 +1,28 @@
-import { redirect } from 'next/navigation';
-import { auth } from '@/app/(auth)/auth';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { ProfileClient } from '@/components/profile-client';
 
-export default async function ProfilePage() {
-  const session = await auth();
+export default function ProfilePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
 
-  // Server-side authentication check
+  useEffect(() => {
+    if (status === 'loading') return;
+
+    if (!session || session.user.type !== 'broker') {
+      router.push('/login');
+    }
+  }, [session, status, router]);
+
+  if (status === 'loading') {
+    return <div>Loading...</div>;
+  }
+
   if (!session || session.user.type !== 'broker') {
-    redirect('/login');
+    return null;
   }
 
   return <ProfileClient session={session} />;

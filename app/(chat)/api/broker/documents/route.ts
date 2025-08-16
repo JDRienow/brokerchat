@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { auth } from '@/app/(auth)/auth';
-import { getBrokerDocuments } from '@/lib/db/queries';
+import { getBrokerDocuments, getTeamDocuments } from '@/lib/db/queries';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,8 +11,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const brokerId = session.user.id;
-    const documents = await getBrokerDocuments(brokerId);
+    let documents: any[];
+
+    // If user is on a team, get all team documents
+    if (session.user.team_id) {
+      documents = await getTeamDocuments(session.user.team_id);
+    } else {
+      // Otherwise, get only the user's documents
+      documents = await getBrokerDocuments(session.user.id);
+    }
 
     return NextResponse.json({
       documents: documents.map((doc) => ({

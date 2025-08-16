@@ -2,8 +2,9 @@
 
 import type { User } from 'next-auth';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
-import { PlusIcon } from '@/components/icons';
+import { PlusIcon, MessageIcon } from '@/components/icons';
 import { SidebarHistory } from '@/components/sidebar-history';
 import { SidebarUserNav } from '@/components/sidebar-user-nav';
 import { Button } from '@/components/ui/button';
@@ -34,9 +35,13 @@ export function AppSidebar({ user }: { user: User | undefined }) {
               }}
               className="flex flex-row gap-3 items-center"
             >
-              <span className="text-lg font-semibold px-2 hover:bg-muted rounded-md cursor-pointer">
-                Chatbot
-              </span>
+              <Image
+                src="/images/om2chat-logo (160 x 40 px).svg"
+                alt="OM2Chat"
+                width={160}
+                height={40}
+                className="h-8 w-auto px-2 hover:bg-muted rounded-md cursor-pointer"
+              />
             </Link>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -60,6 +65,25 @@ export function AppSidebar({ user }: { user: User | undefined }) {
       </SidebarHeader>
       <SidebarContent>
         <SidebarHistory user={user} />
+
+        {/* Broker-specific navigation */}
+        {user?.type === 'broker' && (
+          <div className="px-3 py-2">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Broker Tools
+            </div>
+            <div className="space-y-1">
+              <Link
+                href="/client-sessions"
+                onClick={() => setOpenMobile(false)}
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                <MessageIcon size={16} />
+                Client Conversations
+              </Link>
+            </div>
+          </div>
+        )}
       </SidebarContent>
       <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
     </Sidebar>

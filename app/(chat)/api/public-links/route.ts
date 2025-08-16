@@ -1,8 +1,10 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { auth } from '@/app/(auth)/auth';
 import {
   createPublicLink,
   getBrokerPublicLinks,
+  getTeamPublicLinks,
   updatePublicLink,
   deletePublicLink,
   trackAnalyticsEventSafely,
@@ -67,17 +69,21 @@ export async function POST(request: NextRequest) {
 // GET: Get broker's public links
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const brokerId = searchParams.get('broker_id');
+    const session = await auth();
 
-    if (!brokerId) {
-      return NextResponse.json(
-        { error: 'Missing broker_id parameter' },
-        { status: 400 },
-      );
+    if (!session || !session.user || session.user.type !== 'broker') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const publicLinksRaw = await getBrokerPublicLinks(brokerId);
+    let publicLinksRaw: any[];
+
+    // If user is on a team, get all team public links
+    if (session.user.team_id) {
+      publicLinksRaw = await getTeamPublicLinks(session.user.team_id);
+    } else {
+      // Otherwise, get only the user's public links
+      publicLinksRaw = await getBrokerPublicLinks(session.user.id);
+    }
 
     // Transform the data to match dashboard expectations
     const publicLinks = publicLinksRaw.map((link) => ({
@@ -98,7 +104,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching public links:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch public links' },
+      { error: 'Internal server error' },
       { status: 500 },
     );
   }

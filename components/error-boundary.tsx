@@ -1,125 +1,163 @@
 'use client';
 
-import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { WarningIcon, UndoIcon } from '@/components/icons';
+import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import Link from 'next/link';
 
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
-  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface State {
   hasError: boolean;
-  error: Error | null;
+  error?: Error;
+  errorInfo?: any;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo);
+  componentDidCatch(error: Error, errorInfo: any) {
+    this.setState({ error, errorInfo });
 
-    // Call optional error handler
-    if (this.props.onError) {
-      this.props.onError(error, errorInfo);
+    // Log error to console in development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error caught by boundary:', error, errorInfo);
     }
+
+    // In production, you would send this to your error tracking service
+    // Example: Sentry.captureException(error, { extra: errorInfo });
+
+    // Log to your own error tracking
+    this.logError(error, errorInfo);
   }
 
-  handleReset = () => {
-    this.setState({ hasError: false, error: null });
+  private logError = async (error: Error, errorInfo: any) => {
+    try {
+      await fetch('/api/error-log', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          error: error.message,
+          stack: error.stack,
+          componentStack: errorInfo?.componentStack,
+          url: window.location.href,
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+    } catch (logError) {
+      // Silently fail if error logging fails
+      console.error('Failed to log error:', logError);
+    }
+  };
+
+  private handleRetry = () => {
+    this.setState({ hasError: false, error: undefined, errorInfo: undefined });
+  };
+
+  private handleReload = () => {
+    window.location.reload();
   };
 
   render() {
     if (this.state.hasError) {
-      // Custom fallback UI if provided
+      // Custom fallback UI
       if (this.props.fallback) {
         return this.props.fallback;
       }
 
-      // Default fallback UI
+      // Default error UI
       return (
-        <div className="flex items-center justify-center min-h-[400px] p-4">
-          <Card className="max-w-md w-full">
-            <CardHeader className="text-center">
-              <div className="flex justify-center mb-4">
-                <div className="text-destructive">
-                  <WarningIcon size={48} />
-                </div>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+            <div className="flex justify-center mb-6">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-8 h-8 text-red-600" />
               </div>
-              <CardTitle>Something went wrong</CardTitle>
-              <CardDescription>
-                We encountered an unexpected error. Please try refreshing the
-                page or contact support if the problem persists.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {process.env.NODE_ENV === 'development' && this.state.error && (
-                <div className="p-3 bg-muted rounded-md">
-                  <p className="text-sm font-medium text-destructive mb-2">
-                    Error Details (Development Only):
-                  </p>
-                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                    {this.state.error.message}
-                  </pre>
+            </div>
+
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">
+              Something went wrong
+            </h1>
+
+            <p className="text-gray-600 mb-6">
+              We're sorry, but something unexpected happened. Our team has been
+              notified and is working to fix the issue.
+            </p>
+
+            {process.env.NODE_ENV === 'development' && this.state.error && (
+              <details className="mb-6 text-left">
+                <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700 mb-2">
+                  Error Details (Development)
+                </summary>
+                <div className="bg-gray-100 p-4 rounded text-xs font-mono text-gray-800 overflow-auto max-h-32">
+                  <div className="mb-2">
+                    <strong>Error:</strong> {this.state.error.message}
+                  </div>
+                  <div>
+                    <strong>Stack:</strong>
+                    <pre className="whitespace-pre-wrap">
+                      {this.state.error.stack}
+                    </pre>
+                  </div>
                 </div>
-              )}
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  onClick={this.handleReset}
-                  className="flex-1"
-                  variant="outline"
-                >
-                  <UndoIcon size={16} />
-                  <span className="ml-2">Try Again</span>
+              </details>
+            )}
+
+            <div className="space-y-3">
+              <Button
+                onClick={this.handleRetry}
+                className="w-full bg-[#38b6ff] hover:bg-[#1e40af] text-white"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Try Again
+              </Button>
+
+              <Button
+                onClick={this.handleReload}
+                variant="outline"
+                className="w-full"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Reload Page
+              </Button>
+
+              <Link href="/" className="block">
+                <Button variant="ghost" className="w-full">
+                  <Home className="w-4 h-4 mr-2" />
+                  Go Home
                 </Button>
-                <Button
-                  onClick={() => window.location.reload()}
-                  className="flex-1"
+              </Link>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <p className="text-sm text-gray-500">
+                If the problem persists, please contact{' '}
+                <a
+                  href="mailto:support@om2chat.com"
+                  className="text-[#38b6ff] hover:underline"
                 >
-                  Refresh Page
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  support@om2chat.com
+                </a>
+              </p>
+            </div>
+          </div>
         </div>
       );
     }
 
     return this.props.children;
   }
-}
-
-// Hook version for functional components
-export function useErrorBoundary() {
-  const [error, setError] = React.useState<Error | null>(null);
-
-  const resetError = React.useCallback(() => {
-    setError(null);
-  }, []);
-
-  const captureError = React.useCallback((error: Error) => {
-    setError(error);
-  }, []);
-
-  if (error) {
-    throw error;
-  }
-
-  return { captureError, resetError };
 }

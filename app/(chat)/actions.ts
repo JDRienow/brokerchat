@@ -72,10 +72,25 @@ export async function generateTitleFromUserMessage({
 export async function deleteTrailingMessages({ id }: { id: string }) {
   const [message] = await getMessageById({ id });
 
-  await deleteMessagesByChatIdAfterTimestamp({
-    chatId: message.chatId,
-    timestamp: message.createdAt,
-  });
+  if (!message) {
+    console.error('Message not found for id:', id);
+    return;
+  }
+
+  // Handle both regular chat messages and public chat messages
+  if (message.chatId) {
+    // Regular chat message
+    await deleteMessagesByChatIdAfterTimestamp({
+      chatId: message.chatId,
+      timestamp: message.createdAt,
+    });
+  } else if (message.client_session_id) {
+    // Public chat message - for now, we'll skip deletion since public chat
+    // doesn't have the same trailing message concept
+    console.log('Skipping trailing message deletion for public chat message');
+  } else {
+    console.error('Message has neither chatId nor client_session_id:', message);
+  }
 }
 
 export async function updateChatVisibility({

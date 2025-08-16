@@ -11,12 +11,14 @@ interface SuggestedActionsProps {
   chatId: string;
   sendMessage: UseChatHelpers<ChatMessage>['sendMessage'];
   selectedVisibilityType: VisibilityType;
+  isPublic?: boolean;
 }
 
 function PureSuggestedActions({
   chatId,
   sendMessage,
   selectedVisibilityType,
+  isPublic = false,
 }: SuggestedActionsProps) {
   const suggestedActions = [
     {
@@ -58,7 +60,9 @@ function PureSuggestedActions({
           <Button
             variant="ghost"
             onClick={async () => {
-              window.history.replaceState({}, '', `/chat/${chatId}`);
+              if (!isPublic) {
+                window.history.replaceState({}, '', `/chat/${chatId}`);
+              }
 
               sendMessage({
                 role: 'user',

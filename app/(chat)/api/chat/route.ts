@@ -9,11 +9,37 @@ import {
   trackAnalyticsEvent,
 } from '@/lib/db/queries';
 import type { NextRequest } from 'next/server';
+import {
+  chatRateLimiter,
+  checkDailyMessageLimit,
+} from '@/lib/rate-limit-redis';
+import { entitlementsByUserType } from '@/lib/ai/entitlements';
 
 const OPENAI_EMBEDDING_MODEL =
   process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResult = await chatRateLimiter(request);
+  if (!rateLimitResult.success) {
+    return new Response(
+      JSON.stringify({
+        error: 'Too many requests',
+        retryAfter: rateLimitResult.retryAfter,
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': rateLimitResult.retryAfter?.toString() || '60',
+          'X-RateLimit-Limit': '30',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': rateLimitResult.resetTime?.toString() || '',
+        },
+      },
+    );
+  }
+
   // Check for broker authentication
   const session = await auth();
 
@@ -47,6 +73,35 @@ export async function POST(request: NextRequest) {
   // Require either broker session or valid public session
   if (!session?.user && !isPublicUser) {
     return new Response('Unauthorized', { status: 401 });
+  }
+
+  // Check daily message limits for authenticated users
+  if (session?.user?.id && session.user.type === 'broker') {
+    const entitlements = entitlementsByUserType[session.user.type];
+    const dailyLimitResult = await checkDailyMessageLimit(
+      session.user.id,
+      entitlements.maxMessagesPerDay,
+    );
+
+    if (!dailyLimitResult.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: 'Daily message limit exceeded',
+          remaining: dailyLimitResult.remaining,
+        }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': entitlements.maxMessagesPerDay.toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': new Date(
+              Date.now() + 24 * 60 * 60 * 1000,
+            ).toISOString(),
+          },
+        },
+      );
+    }
   }
 
   try {
@@ -223,13 +278,13 @@ Note: The document content chunks are not yet processed in the database. I can o
                           publicSession.id,
                         );
 
-                        // Update session activity and track analytics
-                        await updateClientSessionActivity(
+                        // Update session activity and track analytics (non-blocking)
+                        updateClientSessionActivity(
                           publicSession.id,
                           publicSession.total_messages + 2,
-                        );
+                        ).catch(console.error);
 
-                        await trackAnalyticsEvent({
+                        trackAnalyticsEvent({
                           broker_id: publicSession.public_link.broker_id,
                           public_link_id: publicSession.public_link.id,
                           client_session_id: publicSession.id,
@@ -239,15 +294,17 @@ Note: The document content chunks are not yet processed in the database. I can o
                             user_message_length: userMessage.length,
                             assistant_message_length: fullResponse.length,
                           },
-                        });
+                        }).catch(console.error);
                       } else {
-                        // Save normally for broker users
-                        await insertChatMessage(chatId, 'user', userMessage);
-                        await insertChatMessage(
+                        // Save normally for broker users (non-blocking)
+                        insertChatMessage(chatId, 'user', userMessage).catch(
+                          console.error,
+                        );
+                        insertChatMessage(
                           chatId,
                           'assistant',
                           fullResponse,
-                        );
+                        ).catch(console.error);
                       }
                     } catch (error) {
                       console.error('Failed to save chat history:', error);

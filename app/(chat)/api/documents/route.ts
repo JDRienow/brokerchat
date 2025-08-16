@@ -8,12 +8,21 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  console.log('Documents API - Session user:', {
+    id: session.user.id,
+    email: session.user.email,
+    type: session.user.type,
+  });
+
   try {
-    // Get all documents from document_metadata table
+    // Get documents for the current user only
     const { data: documents, error } = await supabase
       .from('document_metadata')
       .select('*')
+      .eq('broker_id', session.user.id)
       .order('created_at', { ascending: false });
+
+    console.log('Documents query result:', { documents, error });
 
     if (error) {
       console.error('Error fetching documents:', error);
@@ -39,6 +48,8 @@ export async function GET(request: NextRequest) {
         };
       }),
     );
+
+    console.log('Final documents with chunks:', documentsWithChunks);
 
     return Response.json({
       success: true,

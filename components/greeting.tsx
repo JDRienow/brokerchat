@@ -4,7 +4,7 @@ export const Greeting = ({ hideTitle = false }: { hideTitle?: boolean }) => {
   return (
     <div
       key="overview"
-      className="max-w-3xl mx-auto md:mt-20 px-8 size-full flex flex-col justify-center"
+      className="max-w-3xl mx-auto px-8 size-full flex flex-col justify-center"
     >
       {!hideTitle && (
         <motion.div

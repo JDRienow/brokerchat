@@ -78,7 +78,7 @@ const PurePreviewMessage = ({
 
           <div
             className={cn('flex flex-col gap-4 w-full', {
-              'min-h-96': message.role === 'assistant' && requiresScrollPadding,
+              'pb-2': message.role === 'assistant' && requiresScrollPadding,
             })}
           >
             {attachmentsFromMessage.length > 0 && (
@@ -216,7 +216,11 @@ const PurePreviewMessage = ({
                     <div key={toolCallId}>
                       <DocumentPreview
                         isReadonly={isReadonly}
-                        result={output}
+                        result={{
+                          id: output.id || '',
+                          title: output.title || 'Document',
+                          kind: output.kind || 'text',
+                        }}
                       />
                     </div>
                   );
@@ -258,7 +262,11 @@ const PurePreviewMessage = ({
                     <div key={toolCallId}>
                       <DocumentToolResult
                         type="update"
-                        result={output}
+                        result={{
+                          id: output.id || '',
+                          title: output.title || 'Document',
+                          kind: output.kind || 'text',
+                        }}
                         isReadonly={isReadonly}
                       />
                     </div>
@@ -296,11 +304,22 @@ const PurePreviewMessage = ({
                     );
                   }
 
+                  // Handle different output types for request-suggestions
+                  const result = {
+                    id: output.id || '',
+                    title:
+                      'title' in output ? (output.title as string) : 'Document',
+                    kind:
+                      'kind' in output
+                        ? (output.kind as 'text' | 'code' | 'image' | 'sheet')
+                        : ('text' as const),
+                  };
+
                   return (
                     <div key={toolCallId}>
                       <DocumentToolResult
                         type="request-suggestions"
-                        result={output}
+                        result={result}
                         isReadonly={isReadonly}
                       />
                     </div>
@@ -347,7 +366,7 @@ export const ThinkingMessage = () => {
       data-testid="message-assistant-loading"
       className="w-full mx-auto max-w-3xl px-4 group/message min-h-96"
       initial={{ y: 5, opacity: 0 }}
-      animate={{ y: 0, opacity: 1, transition: { delay: 1 } }}
+      animate={{ y: 0, opacity: 1, transition: { delay: 0.25 } }}
       data-role={role}
     >
       <div
