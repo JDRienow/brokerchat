@@ -1828,13 +1828,26 @@ export async function removeTeamMember(
   // Ensure member belongs to the admin's team before deletion
   const { data: member, error: memberFetchError } = await supabaseAdmin
     .from('brokers')
-    .select('id, team_id')
+    .select('id, team_id, email')
     .eq('id', memberId)
     .maybeSingle();
 
   if (memberFetchError) throw memberFetchError;
   if (!member || member.team_id !== admin.team_id) {
     throw new Error('Member not found on your team');
+  }
+
+  // Delete any invitations for this email so the admin can re-invite later
+  if (member?.email) {
+    try {
+      await supabaseAdmin
+        .from('team_invitations')
+        .delete()
+        .eq('admin_broker_id', adminBrokerId)
+        .eq('invited_email', member.email);
+    } catch (e) {
+      console.error('Failed to delete team invitations for removed member', e);
+    }
   }
 
   await deleteBrokerAndRelatedData(memberId);
