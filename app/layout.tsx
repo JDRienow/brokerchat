@@ -8,10 +8,10 @@ import './globals.css';
 import { SessionProvider } from 'next-auth/react';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://om2chat.com'),
-  title: 'OM2Chat - Commercial Real Estate AI Assistant',
+  metadataBase: new URL('https://www.om2chat.com'),
+  title: 'AI Chat for Offering Memorandums, Rent Roll & T-12 | om2chat',
   description:
-    'AI-powered chatbot for commercial real estate professionals. Upload documents, get instant answers, and share insights with clients.',
+    'Upload OMs, rent rolls, and T-12s. Share a client chat link with cited answers and get buyer insights. Faster qualification, happier clients.',
   icons: {
     icon: '/images/om2chat-favicon (64 x 64 px).svg',
     shortcut: '/images/om2chat-favicon (64 x 64 px).svg',
@@ -71,9 +71,57 @@ export default async function RootLayout({
       className={`${geist.variable} ${geistMono.variable}`}
     >
       <head>
+        {/* Preconnects for faster font loading */}
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+        {/* Preload logo used above-the-fold */}
+        <link rel="preload" as="image" href="/images/om2chat-logo.svg" />
+        {/* Preload hero image for LCP */}
+        <link rel="preload" as="image" href="/images/demo-thumbnail.png" />
+        {/* Ensure modern formats */}
+        <link rel="preload" as="image" href="/images/demo-thumbnail.png" imageSrcSet="/images/demo-thumbnail.png" imageSizes="100vw" />
         <script
           dangerouslySetInnerHTML={{
             __html: THEME_COLOR_SCRIPT,
+          }}
+        />
+        {/* Structured data */}
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@graph': [
+                {
+                  '@type': 'Organization',
+                  name: 'om2chat',
+                  url: 'https://www.om2chat.com',
+                  logo: 'https://www.om2chat.com/images/om2chat-logo.svg',
+                },
+                {
+                  '@type': 'WebSite',
+                  url: 'https://www.om2chat.com',
+                  name: 'om2chat',
+                  potentialAction: {
+                    '@type': 'SearchAction',
+                    target: 'https://www.om2chat.com/search?q={query}',
+                    'query-input': 'required name=query',
+                  },
+                },
+                {
+                  '@type': 'SoftwareApplication',
+                  name: 'om2chat',
+                  applicationCategory: 'BusinessApplication',
+                  operatingSystem: 'Web',
+                  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+                  description:
+                    'AI chat for CRE docs (OMs, rent rolls, T-12). Share a client chat link with citations and see buyer insights.',
+                  url: 'https://www.om2chat.com',
+                  image: 'https://www.om2chat.com/images/demo-thumbnail.png',
+                },
+              ],
+            }),
           }}
         />
       </head>

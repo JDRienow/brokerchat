@@ -136,6 +136,7 @@ export function PricingSection() {
                 </ul>
 
                 <Button
+                  data-analytics-id={`pricing_select:${plan.name.toLowerCase()}`}
                   onClick={() => handleCheckout(plan.name)}
                   disabled={loading === plan.name}
                   className={`w-full mt-auto ${

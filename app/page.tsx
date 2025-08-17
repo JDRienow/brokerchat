@@ -1,24 +1,17 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import type { Metadata } from 'next';
+export const metadata: Metadata = {
+  title: 'AI Chat for Offering Memorandums, Rent Roll & T-12 | om2chat',
+  description:
+    'Upload OMs, rent rolls, and T-12s. Share a client chat link with cited answers and get buyer insights. Faster qualification, happier clients.',
+  alternates: {
+    canonical: 'https://www.om2chat.com/',
+  },
+};
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import {
-  CheckCircle,
-  Upload,
-  MessageSquare,
-  Share2,
-  Zap,
-  Shield,
-  Users,
-  BarChart3,
-} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Upload, MessageSquare, Share2, BarChart3 } from 'lucide-react';
 import { PricingSection } from '@/components/pricing-section';
 
 export default function LandingPage() {
@@ -57,33 +50,37 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="py-20 px-4">
         <div className="container mx-auto text-center max-w-4xl">
-          <Badge className="mb-6 bg-[#38b6ff]/10 text-[#38b6ff] border-[#38b6ff]/20">
-            AI-Powered Document Intelligence
-          </Badge>
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-            Transform Your
-            <span className="text-[#38b6ff]"> Real Estate</span>
-            <br />
-            Documents into
-            <span className="text-[#38b6ff]"> Intelligence</span>
+            AI Chat for CRE OMs & PDFs | om2chat
           </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Upload your commercial real estate documents and get instant
-            AI-powered insights. Chat with your documents, share findings with
-            clients, and close deals faster.
+          <p className="text-lg text-gray-700 mb-8 max-w-2xl mx-auto">
+            Upload CRE PDFs (OMs, rent rolls, T-12s). Share a public chat link; buyers ask questions and get cited answers from the doc. You see conversation insights to qualify interest faster and follow up smarter.
           </p>
+          <div className="mb-8">
+            <Image
+              src="/images/demo-thumbnail.png"
+              alt="Screenshot of om2chat answering questions from an offering memorandum PDF with citations"
+              width={1200}
+              height={720}
+              fetchPriority="high"
+              decoding="async"
+              priority
+              className="rounded-lg shadow-md mx-auto h-auto w-full max-w-4xl"
+            />
+          </div>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/register">
               <Button
                 size="lg"
-                className="bg-[#38b6ff] hover:bg-[#1e40af] text-white px-8 py-3"
+                data-analytics-id="cta_click:start_free"
+                className="bg-gray-900 hover:bg-gray-800 text-white px-8 py-3"
               >
-                Start Free Trial
+                Start Free
               </Button>
             </Link>
-            <Link href="#how-it-works">
-              <Button size="lg" variant="outline" className="px-8 py-3">
-                See How It Works
+            <Link href="/contact-sales">
+              <Button size="lg" variant="outline" className="px-8 py-3" data-analytics-id="cta_click:book_demo">
+                Book demo
               </Button>
             </Link>
           </div>
@@ -91,15 +88,14 @@ export default function LandingPage() {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 px-4 bg-gray-50">
+      <section id="features" className="py-20 px-4 bg-gray-50">
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Everything You Need to Close More Deals
+              Features
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              From document analysis to client presentations, om2chat
-              streamlines your entire workflow.
+              Smart Upload, AI Chat, Client Sharing, Analytics
             </p>
           </div>
 
@@ -167,12 +163,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* How It Works Section */}
+      {/* How om2chat Works */}
       <section id="how-it-works" className="py-20 px-4">
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              How It Works
+              How om2chat Works
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               Get started in minutes, not hours. Here's how om2chat transforms
@@ -185,7 +181,7 @@ export default function LandingPage() {
               <div className="w-16 h-16 bg-[#38b6ff] rounded-full flex items-center justify-center mx-auto mb-6">
                 <span className="text-white font-bold text-xl">1</span>
               </div>
-              <h3 className="text-xl font-semibold mb-4">Upload Documents</h3>
+              <h3 className="text-xl font-semibold mb-4">Upload PDFs</h3>
               <p className="text-gray-600">
                 Drag and drop your commercial real estate PDF documents. Simple
                 and secure upload process.
@@ -196,7 +192,7 @@ export default function LandingPage() {
               <div className="w-16 h-16 bg-[#38b6ff] rounded-full flex items-center justify-center mx-auto mb-6">
                 <span className="text-white font-bold text-xl">2</span>
               </div>
-              <h3 className="text-xl font-semibold mb-4">Chat with AI</h3>
+              <h3 className="text-xl font-semibold mb-4">Share a Chat Link</h3>
               <p className="text-gray-600">
                 Ask questions about your documents in natural language. Get
                 instant insights and analysis.
@@ -207,12 +203,111 @@ export default function LandingPage() {
               <div className="w-16 h-16 bg-[#38b6ff] rounded-full flex items-center justify-center mx-auto mb-6">
                 <span className="text-white font-bold text-xl">3</span>
               </div>
-              <h3 className="text-xl font-semibold mb-4">Share & Close</h3>
+              <h3 className="text-xl font-semibold mb-4">Get Buyer Insights</h3>
               <p className="text-gray-600">
                 Create branded links to share with clients. Track engagement and
                 close deals faster.
               </p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Use Cases */}
+      <section id="use-cases" className="py-20 px-4">
+        <div className="container mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Use Cases</h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Multifamily, Industrial, Retail, Office, Self-Storage</p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <Link href="/use-cases/offering-memorandum-chat" className="block border rounded-lg p-6 hover:shadow-md transition" aria-label="Offering Memorandum chatbot for CRE">
+              <h3 className="text-xl font-semibold mb-2">OM chatbot</h3>
+              <p className="text-gray-600">Chat with your Offering Memorandum PDF. Share a link with buyers and get cited answers.</p>
+            </Link>
+            <Link href="/use-cases/rent-roll-t12-chat" className="block border rounded-lg p-6 hover:shadow-md transition" aria-label="Rent roll and T-12 Q&A">
+              <h3 className="text-xl font-semibold mb-2">Rent roll & T-12 Q&A</h3>
+              <p className="text-gray-600">Instant answers from rent rolls and T-12s to qualify interest faster.</p>
+            </Link>
+            <Link href="/use-cases/client-portal-alternative" className="block border rounded-lg p-6 hover:shadow-md transition" aria-label="Real estate client portal alternative">
+              <h3 className="text-xl font-semibold mb-2">Client portal alternative</h3>
+              <p className="text-gray-600">Replace email threads with a shareable chat link and analytics.</p>
+            </Link>
+            <Link href="/residential" className="block border rounded-lg p-6 hover:shadow-md transition" aria-label="AI for residential agents">
+              <h3 className="text-xl font-semibold mb-2">AI for agents</h3>
+              <p className="text-gray-600">Disclosure and listing packet Q&A with citations for homebuyers.</p>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Results brokers care about */}
+      <section id="results" className="py-16 px-4 bg-gray-50">
+        <div className="container mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">Results brokers care about</h2>
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <div>
+              <div className="text-4xl font-bold text-gray-900">2x</div>
+              <p className="text-gray-600">Faster buyer qualification</p>
+            </div>
+            <div>
+              <div className="text-4xl font-bold text-gray-900">+35%</div>
+              <p className="text-gray-600">Higher engagement on shared links</p>
+            </div>
+            <div>
+              <div className="text-4xl font-bold text-gray-900">0</div>
+              <p className="text-gray-600">File downloads required</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQs */}
+      <section id="faqs" className="py-20 px-4">
+        <div className="container mx-auto max-w-3xl">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8 text-center">FAQs</h2>
+          <div className="space-y-4">
+            <details onToggle={(e) => {
+              if ((e.target as HTMLDetailsElement).open) {
+                // Hook for analytics: faq_expand
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('om2chat_analytics', { detail: { event: 'faq_expand', id: 'what-is-om2chat' } }));
+                }
+              }
+            }} className="border rounded-md p-4">
+              <summary className="cursor-pointer font-medium">What is om2chat?</summary>
+              <p className="mt-2 text-gray-600">om2chat is an AI assistant for commercial real estate documents like Offering Memorandums, rent rolls, and T-12s. Share a public chat link and get cited answers.</p>
+            </details>
+            <details onToggle={(e) => {
+              if ((e.target as HTMLDetailsElement).open) {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('om2chat_analytics', { detail: { event: 'faq_expand', id: 'how-sharing-works' } }));
+                }
+              }
+            }} className="border rounded-md p-4">
+              <summary className="cursor-pointer font-medium">How does sharing work?</summary>
+              <p className="mt-2 text-gray-600">Upload your PDFs and create a shareable link. Buyers can ask questions and receive answers with citations to the source pages.</p>
+            </details>
+            <details onToggle={(e) => {
+              if ((e.target as HTMLDetailsElement).open) {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('om2chat_analytics', { detail: { event: 'faq_expand', id: 'which-docs' } }));
+                }
+              }
+            }} className="border rounded-md p-4">
+              <summary className="cursor-pointer font-medium">Which documents are supported?</summary>
+              <p className="mt-2 text-gray-600">Offering Memorandums, rent rolls, T-12s, site plans, and more. If it’s a PDF, you can likely chat with it.</p>
+            </details>
+            <details onToggle={(e) => {
+              if ((e.target as HTMLDetailsElement).open) {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('om2chat_analytics', { detail: { event: 'faq_expand', id: 'security' } }));
+                }
+              }
+            }} className="border rounded-md p-4">
+              <summary className="cursor-pointer font-medium">Is my data secure?</summary>
+              <p className="mt-2 text-gray-600">Documents are processed securely and links can be revoked at any time. See our Privacy Policy for details.</p>
+            </details>
           </div>
         </div>
       </section>
@@ -237,7 +332,7 @@ export default function LandingPage() {
                 size="lg"
                 className="bg-white text-[#38b6ff] hover:bg-gray-100 px-8 py-3"
               >
-                Start Free Trial
+                Start Free
               </Button>
             </Link>
             <Link href="/login">
