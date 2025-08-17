@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Upload, MessageSquare, Share2, BarChart3 } from 'lucide-react';
 import { PricingSection } from '@/components/pricing-section';
+import { FaqItem } from '@/components/faq-item';
 
 export default function LandingPage() {
   return (
@@ -54,7 +55,10 @@ export default function LandingPage() {
             AI Chat for CRE OMs & PDFs | om2chat
           </h1>
           <p className="text-lg text-gray-700 mb-8 max-w-2xl mx-auto">
-            Upload CRE PDFs (OMs, rent rolls, T-12s). Share a public chat link; buyers ask questions and get cited answers from the doc. You see conversation insights to qualify interest faster and follow up smarter.
+            Upload CRE PDFs (OMs, rent rolls, T-12s). Share a public chat link;
+            buyers ask questions and get cited answers from the doc. You see
+            conversation insights to qualify interest faster and follow up
+            smarter.
           </p>
           <div className="mb-8">
             <Image
@@ -79,7 +83,12 @@ export default function LandingPage() {
               </Button>
             </Link>
             <Link href="/contact-sales">
-              <Button size="lg" variant="outline" className="px-8 py-3" data-analytics-id="cta_click:book_demo">
+              <Button
+                size="lg"
+                variant="outline"
+                className="px-8 py-3"
+                data-analytics-id="cta_click:book_demo"
+              >
                 Book demo
               </Button>
             </Link>
@@ -217,25 +226,59 @@ export default function LandingPage() {
       <section id="use-cases" className="py-20 px-4">
         <div className="container mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Use Cases</h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">Multifamily, Industrial, Retail, Office, Self-Storage</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Use Cases
+            </h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Multifamily, Industrial, Retail, Office, Self-Storage
+            </p>
           </div>
           <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            <Link href="/use-cases/offering-memorandum-chat" className="block border rounded-lg p-6 hover:shadow-md transition" aria-label="Offering Memorandum chatbot for CRE">
+            <Link
+              href="/use-cases/offering-memorandum-chat"
+              className="block border rounded-lg p-6 hover:shadow-md transition"
+              aria-label="Offering Memorandum chatbot for CRE"
+            >
               <h3 className="text-xl font-semibold mb-2">OM chatbot</h3>
-              <p className="text-gray-600">Chat with your Offering Memorandum PDF. Share a link with buyers and get cited answers.</p>
+              <p className="text-gray-600">
+                Chat with your Offering Memorandum PDF. Share a link with buyers
+                and get cited answers.
+              </p>
             </Link>
-            <Link href="/use-cases/rent-roll-t12-chat" className="block border rounded-lg p-6 hover:shadow-md transition" aria-label="Rent roll and T-12 Q&A">
-              <h3 className="text-xl font-semibold mb-2">Rent roll & T-12 Q&A</h3>
-              <p className="text-gray-600">Instant answers from rent rolls and T-12s to qualify interest faster.</p>
+            <Link
+              href="/use-cases/rent-roll-t12-chat"
+              className="block border rounded-lg p-6 hover:shadow-md transition"
+              aria-label="Rent roll and T-12 Q&A"
+            >
+              <h3 className="text-xl font-semibold mb-2">
+                Rent roll & T-12 Q&A
+              </h3>
+              <p className="text-gray-600">
+                Instant answers from rent rolls and T-12s to qualify interest
+                faster.
+              </p>
             </Link>
-            <Link href="/use-cases/client-portal-alternative" className="block border rounded-lg p-6 hover:shadow-md transition" aria-label="Real estate client portal alternative">
-              <h3 className="text-xl font-semibold mb-2">Client portal alternative</h3>
-              <p className="text-gray-600">Replace email threads with a shareable chat link and analytics.</p>
+            <Link
+              href="/use-cases/client-portal-alternative"
+              className="block border rounded-lg p-6 hover:shadow-md transition"
+              aria-label="Real estate client portal alternative"
+            >
+              <h3 className="text-xl font-semibold mb-2">
+                Client portal alternative
+              </h3>
+              <p className="text-gray-600">
+                Replace email threads with a shareable chat link and analytics.
+              </p>
             </Link>
-            <Link href="/residential" className="block border rounded-lg p-6 hover:shadow-md transition" aria-label="AI for residential agents">
+            <Link
+              href="/residential"
+              className="block border rounded-lg p-6 hover:shadow-md transition"
+              aria-label="AI for residential agents"
+            >
               <h3 className="text-xl font-semibold mb-2">AI for agents</h3>
-              <p className="text-gray-600">Disclosure and listing packet Q&A with citations for homebuyers.</p>
+              <p className="text-gray-600">
+                Disclosure and listing packet Q&A with citations for homebuyers.
+              </p>
             </Link>
           </div>
         </div>
@@ -244,7 +287,9 @@ export default function LandingPage() {
       {/* Results brokers care about */}
       <section id="results" className="py-16 px-4 bg-gray-50">
         <div className="container mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">Results brokers care about</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">
+            Results brokers care about
+          </h2>
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             <div>
               <div className="text-4xl font-bold text-gray-900">2x</div>
@@ -265,49 +310,51 @@ export default function LandingPage() {
       {/* FAQs */}
       <section id="faqs" className="py-20 px-4">
         <div className="container mx-auto max-w-3xl">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8 text-center">FAQs</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8 text-center">
+            FAQs
+          </h2>
           <div className="space-y-4">
-            <details onToggle={(e) => {
-              if ((e.target as HTMLDetailsElement).open) {
-                // Hook for analytics: faq_expand
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('om2chat_analytics', { detail: { event: 'faq_expand', id: 'what-is-om2chat' } }));
-                }
+            <FaqItem
+              id="what-is-om2chat"
+              question="What is om2chat?"
+              answer={
+                <p>
+                  om2chat is an AI assistant for commercial real estate
+                  documents like Offering Memorandums, rent rolls, and T-12s.
+                  Share a public chat link and get cited answers.
+                </p>
               }
-            }} className="border rounded-md p-4">
-              <summary className="cursor-pointer font-medium">What is om2chat?</summary>
-              <p className="mt-2 text-gray-600">om2chat is an AI assistant for commercial real estate documents like Offering Memorandums, rent rolls, and T-12s. Share a public chat link and get cited answers.</p>
-            </details>
-            <details onToggle={(e) => {
-              if ((e.target as HTMLDetailsElement).open) {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('om2chat_analytics', { detail: { event: 'faq_expand', id: 'how-sharing-works' } }));
-                }
+            />
+            <FaqItem
+              id="how-sharing-works"
+              question="How does sharing work?"
+              answer={
+                <p>
+                  Upload your PDFs and create a shareable link. Buyers can ask
+                  questions and receive answers with citations to the source pages.
+                </p>
               }
-            }} className="border rounded-md p-4">
-              <summary className="cursor-pointer font-medium">How does sharing work?</summary>
-              <p className="mt-2 text-gray-600">Upload your PDFs and create a shareable link. Buyers can ask questions and receive answers with citations to the source pages.</p>
-            </details>
-            <details onToggle={(e) => {
-              if ((e.target as HTMLDetailsElement).open) {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('om2chat_analytics', { detail: { event: 'faq_expand', id: 'which-docs' } }));
-                }
+            />
+            <FaqItem
+              id="which-docs"
+              question="Which documents are supported?"
+              answer={
+                <p>
+                  Offering Memorandums, rent rolls, T-12s, site plans, and more.
+                  If it’s a PDF, you can likely chat with it.
+                </p>
               }
-            }} className="border rounded-md p-4">
-              <summary className="cursor-pointer font-medium">Which documents are supported?</summary>
-              <p className="mt-2 text-gray-600">Offering Memorandums, rent rolls, T-12s, site plans, and more. If it’s a PDF, you can likely chat with it.</p>
-            </details>
-            <details onToggle={(e) => {
-              if ((e.target as HTMLDetailsElement).open) {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('om2chat_analytics', { detail: { event: 'faq_expand', id: 'security' } }));
-                }
+            />
+            <FaqItem
+              id="security"
+              question="Is my data secure?"
+              answer={
+                <p>
+                  Documents are processed securely and links can be revoked at any
+                  time. See our Privacy Policy for details.
+                </p>
               }
-            }} className="border rounded-md p-4">
-              <summary className="cursor-pointer font-medium">Is my data secure?</summary>
-              <p className="mt-2 text-gray-600">Documents are processed securely and links can be revoked at any time. See our Privacy Policy for details.</p>
-            </details>
+            />
           </div>
         </div>
       </section>
