@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import type { Metadata } from 'next';
 export const metadata: Metadata = {
-  title: 'AI Chat for Offering Memorandums, Rent Roll & T-12 | om2chat',
+  title: 'om2chat',
   description:
     'Upload OMs, rent rolls, and T-12s. Share a client chat link with cited answers and get buyer insights. Faster qualification, happier clients.',
   alternates: {
@@ -62,7 +62,8 @@ export default function LandingPage() {
             <span className="text-[#38b6ff]"> Intelligence</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Upload CRE PDFs (OMs, rent rolls, T-12s). Share a public chat link with cited answers and see buyer insights—no downloads or logins.
+            Upload CRE PDFs (OMs, rent rolls, T-12s). Share a public chat link
+            with cited answers and see buyer insights—no downloads or logins.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/register">
@@ -213,8 +214,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
-      
 
       {/* Results brokers care about */}
       <section id="results" className="py-16 px-4 bg-gray-50">
