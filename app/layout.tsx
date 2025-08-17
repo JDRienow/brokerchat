@@ -9,7 +9,7 @@ import { SessionProvider } from 'next-auth/react';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.om2chat.com'),
-  title: 'AI Chat for Offering Memorandums, Rent Roll & T-12 | om2chat',
+  title: 'om2chat',
   description:
     'Upload OMs, rent rolls, and T-12s. Share a client chat link with cited answers and get buyer insights. Faster qualification, happier clients.',
   icons: {
