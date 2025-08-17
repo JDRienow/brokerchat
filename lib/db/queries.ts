@@ -661,6 +661,57 @@ export async function deleteDocumentAndRelatedData(documentId: string) {
   }
 }
 
+// Fully delete a broker and all associated data
+export async function deleteBrokerAndRelatedData(brokerId: string) {
+  try {
+    // 1) Fetch all documents owned by the broker and delete them (cascades related data)
+    const { data: docs, error: docsError } = await supabaseAdmin
+      .from('document_metadata')
+      .select('id')
+      .eq('broker_id', brokerId);
+
+    if (docsError) throw docsError;
+
+    if (docs && docs.length > 0) {
+      for (const doc of docs) {
+        try {
+          await deleteDocumentAndRelatedData(doc.id);
+        } catch (e) {
+          console.error('Error deleting document for broker:', brokerId, doc.id, e);
+        }
+      }
+    }
+
+    // 2) Delete public links that might not be covered (defensive)
+    const { data: linkIds } = await supabaseAdmin
+      .from('public_links')
+      .select('id')
+      .eq('broker_id', brokerId);
+    if (linkIds && linkIds.length > 0) {
+      const ids = linkIds.map((l: any) => l.id);
+      await supabaseAdmin.from('analytics').delete().in('public_link_id', ids);
+      await supabaseAdmin.from('client_sessions').delete().in('public_link_id', ids);
+      await supabaseAdmin.from('public_links').delete().in('id', ids);
+    }
+
+    // 3) Delete analytics events recorded by this broker id
+    await supabaseAdmin.from('analytics').delete().eq('broker_id', brokerId);
+
+    // 4) Finally delete the broker row
+    const { error: brokerDeleteError } = await supabaseAdmin
+      .from('brokers')
+      .delete()
+      .eq('id', brokerId);
+
+    if (brokerDeleteError) throw brokerDeleteError;
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting broker and related data:', error);
+    throw error;
+  }
+}
+
 // ==================== CLIENT SESSION FUNCTIONS ====================
 
 // Create or get existing client session
@@ -1744,18 +1795,20 @@ export async function removeTeamMember(
   if (!admin || !admin.is_team_admin) {
     throw new Error('Only team admins can remove team members');
   }
-
-  const { error } = await supabaseAdmin
+  // Delete the member and all their data to revoke access entirely
+  // Ensure member belongs to the admin's team before deletion
+  const { data: member, error: memberFetchError } = await supabaseAdmin
     .from('brokers')
-    .update({
-      team_id: null,
-      is_team_admin: false,
-      invited_by: null,
-    })
+    .select('id, team_id')
     .eq('id', memberId)
-    .eq('team_id', admin.team_id);
+    .maybeSingle();
 
-  if (error) throw error;
+  if (memberFetchError) throw memberFetchError;
+  if (!member || member.team_id !== admin.team_id) {
+    throw new Error('Member not found on your team');
+  }
+
+  await deleteBrokerAndRelatedData(memberId);
 }
 
 export async function getPendingInvitations(adminBrokerId: string) {
