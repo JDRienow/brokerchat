@@ -314,6 +314,27 @@ export async function getBrokerById(id: string) {
   return data;
 }
 
+// Resolve the owning broker for a user: if user is on a team, return the team admin broker id; otherwise the user's id
+export async function resolveOwnerBrokerIdForUser(
+  userId: string,
+): Promise<string> {
+  const { data: broker, error } = await supabaseAdmin
+    .from('brokers')
+    .select('id, team_id')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!broker) return userId;
+  if (!broker.team_id) return userId;
+  const { data: team, error: teamError } = await supabaseAdmin
+    .from('teams')
+    .select('admin_broker_id')
+    .eq('id', broker.team_id)
+    .maybeSingle();
+  if (teamError || !team?.admin_broker_id) return userId;
+  return team.admin_broker_id as string;
+}
+
 // Create new broker
 export async function createBroker(brokerData: {
   email: string;
@@ -677,7 +698,12 @@ export async function deleteBrokerAndRelatedData(brokerId: string) {
         try {
           await deleteDocumentAndRelatedData(doc.id);
         } catch (e) {
-          console.error('Error deleting document for broker:', brokerId, doc.id, e);
+          console.error(
+            'Error deleting document for broker:',
+            brokerId,
+            doc.id,
+            e,
+          );
         }
       }
     }
@@ -690,7 +716,10 @@ export async function deleteBrokerAndRelatedData(brokerId: string) {
     if (linkIds && linkIds.length > 0) {
       const ids = linkIds.map((l: any) => l.id);
       await supabaseAdmin.from('analytics').delete().in('public_link_id', ids);
-      await supabaseAdmin.from('client_sessions').delete().in('public_link_id', ids);
+      await supabaseAdmin
+        .from('client_sessions')
+        .delete()
+        .in('public_link_id', ids);
       await supabaseAdmin.from('public_links').delete().in('id', ids);
     }
 

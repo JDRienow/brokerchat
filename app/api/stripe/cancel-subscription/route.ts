@@ -18,7 +18,9 @@ export async function POST(request: NextRequest) {
     // Get the user's Stripe subscription ID directly from the database
     const { data: userData, error: userError } = await supabaseAdmin
       .from('brokers')
-      .select('stripe_subscription_id, stripe_customer_id, email')
+      .select(
+        'stripe_subscription_id, stripe_customer_id, email, team_id, is_team_admin',
+      )
       .eq('id', session.user.id)
       .single();
 
@@ -27,6 +29,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Failed to fetch user data' },
         { status: 500 },
+      );
+    }
+
+    // Only team admins can cancel when part of a team
+    if (userData?.team_id && !userData?.is_team_admin) {
+      return NextResponse.json(
+        { error: 'Only the team admin can manage the team subscription' },
+        { status: 403 },
       );
     }
 

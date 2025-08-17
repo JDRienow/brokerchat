@@ -14,14 +14,27 @@ export default function Page() {
   return (
     <main className="px-4 py-12">
       <div className="container mx-auto max-w-3xl">
-        <h1 className="text-4xl font-bold mb-4">Rent Roll &amp; T-12 Q&amp;A for CRE</h1>
+        <h1 className="text-4xl font-bold mb-4">
+          Rent Roll &amp; T-12 Q&amp;A for CRE
+        </h1>
         <p className="text-gray-700 mb-6">
-          Upload rent rolls and T-12s, then share a public chat link. Buyers ask questions and receive
-          cited answers from the documents, letting you prioritize serious inquiries.
+          Upload rent rolls and T-12s, then share a public chat link. Buyers ask
+          questions and receive cited answers from the documents, letting you
+          prioritize serious inquiries.
         </p>
         <div className="flex gap-3 mb-10">
-          <Link href="/register" className="inline-flex items-center justify-center rounded-md bg-gray-900 text-white px-5 py-3">Start Free</Link>
-          <Link href="/contact-sales" className="inline-flex items-center justify-center rounded-md border px-5 py-3">Book demo</Link>
+          <Link
+            href="/register"
+            className="inline-flex items-center justify-center rounded-md bg-gray-900 text-white px-5 py-3"
+          >
+            Start Free
+          </Link>
+          <Link
+            href="/contact-sales"
+            className="inline-flex items-center justify-center rounded-md border px-5 py-3"
+          >
+            Book demo
+          </Link>
         </div>
         <h2 className="text-2xl font-semibold mb-3">Typical questions</h2>
         <ul className="list-disc pl-6 text-gray-700 mb-6">
@@ -31,13 +44,29 @@ export default function Page() {
         </ul>
         <h2 className="text-2xl font-semibold mb-3">Related use cases</h2>
         <ul className="list-disc pl-6 text-gray-700">
-          <li><Link href="/use-cases/offering-memorandum-chat" className="underline">Offering Memorandum chatbot</Link></li>
-          <li><Link href="/use-cases/client-portal-alternative" className="underline">Client portal alternative</Link></li>
-          <li><Link href="/residential" className="underline">AI for agents</Link></li>
+          <li>
+            <Link
+              href="/use-cases/offering-memorandum-chat"
+              className="underline"
+            >
+              Offering Memorandum chatbot
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/use-cases/client-portal-alternative"
+              className="underline"
+            >
+              Client portal alternative
+            </Link>
+          </li>
+          <li>
+            <Link href="/residential" className="underline">
+              AI for agents
+            </Link>
+          </li>
         </ul>
       </div>
     </main>
   );
 }
-
-

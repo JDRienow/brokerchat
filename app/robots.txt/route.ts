@@ -12,5 +12,3 @@ Sitemap: https://www.om2chat.com/sitemap.xml\n`;
     },
   });
 }
-
-

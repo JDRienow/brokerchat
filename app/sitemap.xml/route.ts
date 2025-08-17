@@ -17,7 +17,10 @@ const staticUrls = [
 
 export function GET() {
   const urls = staticUrls
-    .map((path) => `  <url><loc>${base}${path}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`) 
+    .map(
+      (path) =>
+        `  <url><loc>${base}${path}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`,
+    )
     .join('\n');
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -32,5 +35,3 @@ ${urls}
     },
   });
 }
-
-

@@ -708,33 +708,38 @@ export function ProfileClient({ session }: ProfileClientProps) {
                   Upgrade Plan
                 </Button>
               )}
-              {isPaidPlan && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push('/pricing')}
-                  >
-                    Change Plan
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleManageSubscription}
-                    disabled={isManagingBilling}
-                  >
-                    {isManagingBilling ? 'Opening...' : 'Manage Billing'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-red-500 text-red-500 hover:bg-red-50"
-                    onClick={() => setShowCancelConfirmation(true)}
-                  >
-                    Cancel Plan
-                  </Button>
-                </>
-              )}
+              {isPaidPlan &&
+                (subscriptionTier === 'team' && !isTeamAdmin ? (
+                  <span className="text-sm text-muted-foreground">
+                    Only the team admin can manage the subscription.
+                  </span>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push('/pricing')}
+                    >
+                      Change Plan
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleManageSubscription}
+                      disabled={isManagingBilling}
+                    >
+                      {isManagingBilling ? 'Opening...' : 'Manage Billing'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-red-500 text-red-500 hover:bg-red-50"
+                      onClick={() => setShowCancelConfirmation(true)}
+                    >
+                      Cancel Plan
+                    </Button>
+                  </div>
+                ))}
             </div>
           </CardTitle>
           <CardDescription>Your current subscription plan</CardDescription>

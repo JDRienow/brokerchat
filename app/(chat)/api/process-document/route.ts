@@ -4,6 +4,7 @@ import {
   insertDocumentChunk,
   insertDocumentMetadataWithBroker,
   getBrokerDocuments,
+  resolveOwnerBrokerIdForUser,
 } from '@/lib/db/queries';
 import type { NextRequest } from 'next/server';
 import { uploadRateLimiter } from '@/lib/rate-limit-redis';
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ENFORCE DOCUMENT LIMITS
-  const brokerId = session.user.id;
+  const brokerId = await resolveOwnerBrokerIdForUser(session.user.id);
   const tier = session.user.subscription_tier;
   const docs = await getBrokerDocuments(brokerId);
   const maxDocs = getMaxDocumentsForTier(tier);
@@ -261,7 +262,7 @@ export async function POST(request: NextRequest) {
         const metadata = await insertDocumentMetadataWithBroker(
           title,
           actualFileName,
-          session.user.id,
+          brokerId,
           fileUrl || undefined, // Pass storage URL if available
         );
         console.log('Metadata result:', metadata);
@@ -351,7 +352,7 @@ export async function POST(request: NextRequest) {
           i, // chunk_index
           {
             // metadata
-            user_id: session.user.id,
+            user_id: brokerId,
             processed_at: new Date().toISOString(),
           },
         );

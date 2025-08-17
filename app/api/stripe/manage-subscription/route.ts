@@ -31,6 +31,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Only team admins can manage subscription when part of a team
+    if (broker.team_id && !broker.is_team_admin) {
+      return NextResponse.json(
+        { error: 'Only team admins can manage the team subscription' },
+        { status: 403 },
+      );
+    }
+
     // Check if user has an active subscription
     if (!broker.stripe_subscription_id) {
       return NextResponse.json(

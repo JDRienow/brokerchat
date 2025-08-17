@@ -8,6 +8,7 @@ import {
   updatePublicLink,
   deletePublicLink,
   trackAnalyticsEventSafely,
+  resolveOwnerBrokerIdForUser,
 } from '@/lib/db/queries';
 
 // POST: Create a new public link
@@ -29,10 +30,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the public link
+    // Force ownership to the admin broker for team accounts
+    const ownerBrokerId = await resolveOwnerBrokerIdForUser(broker_id);
+
+    // Create the public link owned by the admin broker
     const publicLink = await createPublicLink({
       document_id,
-      broker_id,
+      broker_id: ownerBrokerId,
       title,
       description,
       requires_email,
@@ -41,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     // Track analytics event
     await trackAnalyticsEventSafely({
-      broker_id,
+      broker_id: ownerBrokerId,
       public_link_id: publicLink.id,
       event_type: 'link_view',
       event_data: { action: 'created' },

@@ -12,7 +12,10 @@ export function FaqItem({ id, question, answer }: FaqItemProps) {
   return (
     <details
       onToggle={(e) => {
-        if ((e.target as HTMLDetailsElement).open && typeof window !== 'undefined') {
+        if (
+          (e.target as HTMLDetailsElement).open &&
+          typeof window !== 'undefined'
+        ) {
           window.dispatchEvent(
             new CustomEvent('om2chat_analytics', {
               detail: { event: 'faq_expand', id },
@@ -27,5 +30,3 @@ export function FaqItem({ id, question, answer }: FaqItemProps) {
     </details>
   );
 }
-
-
