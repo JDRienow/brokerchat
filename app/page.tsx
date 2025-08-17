@@ -51,27 +51,19 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="py-20 px-4">
         <div className="container mx-auto text-center max-w-4xl">
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-            AI Chat for CRE OMs & PDFs | om2chat
-          </h1>
-          <p className="text-lg text-gray-700 mb-8 max-w-2xl mx-auto">
-            Upload CRE PDFs (OMs, rent rolls, T-12s). Share a public chat link;
-            buyers ask questions and get cited answers from the doc. You see
-            conversation insights to qualify interest faster and follow up
-            smarter.
-          </p>
-          <div className="mb-8">
-            <Image
-              src="/images/demo-thumbnail.png"
-              alt="Screenshot of om2chat answering questions from an offering memorandum PDF with citations"
-              width={1200}
-              height={720}
-              fetchPriority="high"
-              decoding="async"
-              priority
-              className="rounded-lg shadow-md mx-auto h-auto w-full max-w-4xl"
-            />
+          <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors border-transparent bg-primary/10 text-gray-700 mb-4">
+            AI-Powered Document Intelligence
           </div>
+          <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-gray-900 mb-6">
+            Transform Your
+            <span className="text-[#38b6ff]"> Real Estate</span>
+            <br />
+            Documents into
+            <span className="text-[#38b6ff]"> Intelligence</span>
+          </h1>
+          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            Upload CRE PDFs (OMs, rent rolls, T-12s). Share a public chat link with cited answers and see buyer insights—no downloads or logins.
+          </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/register">
               <Button
@@ -222,67 +214,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Use Cases */}
-      <section id="use-cases" className="py-20 px-4">
-        <div className="container mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Use Cases
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Multifamily, Industrial, Retail, Office, Self-Storage
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            <Link
-              href="/use-cases/offering-memorandum-chat"
-              className="block border rounded-lg p-6 hover:shadow-md transition"
-              aria-label="Offering Memorandum chatbot for CRE"
-            >
-              <h3 className="text-xl font-semibold mb-2">OM chatbot</h3>
-              <p className="text-gray-600">
-                Chat with your Offering Memorandum PDF. Share a link with buyers
-                and get cited answers.
-              </p>
-            </Link>
-            <Link
-              href="/use-cases/rent-roll-t12-chat"
-              className="block border rounded-lg p-6 hover:shadow-md transition"
-              aria-label="Rent roll and T-12 Q&A"
-            >
-              <h3 className="text-xl font-semibold mb-2">
-                Rent roll & T-12 Q&A
-              </h3>
-              <p className="text-gray-600">
-                Instant answers from rent rolls and T-12s to qualify interest
-                faster.
-              </p>
-            </Link>
-            <Link
-              href="/use-cases/client-portal-alternative"
-              className="block border rounded-lg p-6 hover:shadow-md transition"
-              aria-label="Real estate client portal alternative"
-            >
-              <h3 className="text-xl font-semibold mb-2">
-                Client portal alternative
-              </h3>
-              <p className="text-gray-600">
-                Replace email threads with a shareable chat link and analytics.
-              </p>
-            </Link>
-            <Link
-              href="/residential"
-              className="block border rounded-lg p-6 hover:shadow-md transition"
-              aria-label="AI for residential agents"
-            >
-              <h3 className="text-xl font-semibold mb-2">AI for agents</h3>
-              <p className="text-gray-600">
-                Disclosure and listing packet Q&A with citations for homebuyers.
-              </p>
-            </Link>
-          </div>
-        </div>
-      </section>
+      
 
       {/* Results brokers care about */}
       <section id="results" className="py-16 px-4 bg-gray-50">
@@ -331,7 +263,8 @@ export default function LandingPage() {
               answer={
                 <p>
                   Upload your PDFs and create a shareable link. Buyers can ask
-                  questions and receive answers with citations to the source pages.
+                  questions and receive answers with citations to the source
+                  pages.
                 </p>
               }
             />
@@ -350,8 +283,8 @@ export default function LandingPage() {
               question="Is my data secure?"
               answer={
                 <p>
-                  Documents are processed securely and links can be revoked at any
-                  time. See our Privacy Policy for details.
+                  Documents are processed securely and links can be revoked at
+                  any time. See our Privacy Policy for details.
                 </p>
               }
             />

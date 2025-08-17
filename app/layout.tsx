@@ -72,14 +72,19 @@ export default async function RootLayout({
     >
       <head>
         {/* Preconnects for faster font loading */}
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preconnect"
+          href="https://fonts.googleapis.com"
+          crossOrigin="anonymous"
+        />
         {/* Preload logo used above-the-fold */}
         <link rel="preload" as="image" href="/images/om2chat-logo.svg" />
-        {/* Preload hero image for LCP */}
-        <link rel="preload" as="image" href="/images/demo-thumbnail.png" />
-        {/* Ensure modern formats */}
-        <link rel="preload" as="image" href="/images/demo-thumbnail.png" imageSrcSet="/images/demo-thumbnail.png" imageSizes="100vw" />
+        {/* Hero image preload removed to simplify header visuals */}
         <script
           dangerouslySetInnerHTML={{
             __html: THEME_COLOR_SCRIPT,
@@ -114,7 +119,11 @@ export default async function RootLayout({
                   name: 'om2chat',
                   applicationCategory: 'BusinessApplication',
                   operatingSystem: 'Web',
-                  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+                  offers: {
+                    '@type': 'Offer',
+                    price: '0',
+                    priceCurrency: 'USD',
+                  },
                   description:
                     'AI chat for CRE docs (OMs, rent rolls, T-12). Share a client chat link with citations and see buyer insights.',
                   url: 'https://www.om2chat.com',
