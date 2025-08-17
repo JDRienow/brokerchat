@@ -17,6 +17,29 @@ export const metadata: Metadata = {
     shortcut: '/images/om2chat-favicon (64 x 64 px).svg',
     apple: '/images/om2chat-favicon (64 x 64 px).svg',
   },
+  openGraph: {
+    title: 'om2chat',
+    description:
+      'Upload OMs, rent rolls, and T-12s. Share a client chat link with cited answers and get buyer insights.',
+    url: 'https://www.om2chat.com',
+    siteName: 'om2chat',
+    type: 'website',
+    images: [
+      {
+        url: '/images/demo-thumbnail.png',
+        width: 1200,
+        height: 630,
+        alt: 'om2chat – AI chat for CRE docs',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'om2chat',
+    description:
+      'Upload OMs, rent rolls, and T-12s. Share a client chat link with cited answers and get buyer insights.',
+    images: ['/images/demo-thumbnail.png'],
+  },
 };
 
 export const viewport = {
