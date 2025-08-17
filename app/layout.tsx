@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     type: 'website',
     images: [
       {
-        url: '/images/demo-thumbnail.png',
+        url: '/images/om2chat-og (1200 x 630 px).png',
         width: 1200,
         height: 630,
         alt: 'om2chat – AI chat for CRE docs',
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     title: 'om2chat',
     description:
       'Upload OMs, rent rolls, and T-12s. Share a client chat link with cited answers and get buyer insights.',
-    images: ['/images/demo-thumbnail.png'],
+    images: ['/images/om2chat-og (1200 x 630 px).png'],
   },
 };
 
